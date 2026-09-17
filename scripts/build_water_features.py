@@ -20,8 +20,10 @@ MIN_LAT = 42.1
 MAX_LAT = 44.8
 MIN_LON = -84.8
 MAX_LON = -78.8
-# About 825 m at this latitude; keep the outline readable at radar scale.
+# About 825 m at this latitude; keep river detail readable at radar scale.
 SIMPLIFY_DEG = 0.0075
+# Lake shorelines are far longer and don't need river-level detail (~2.2 km).
+LAKE_SIMPLIFY_DEG = 0.02
 REQUEST_DELAY_SECONDS = 10
 RATE_LIMIT_BACKOFF_SECONDS = 30
 
@@ -34,9 +36,11 @@ OVERPASS_URLS = (
 
 
 def query_for_bounds(min_lon: float, max_lon: float) -> str:
-    return f"""[out:json][timeout:120];
+    # The Great Lakes are mapped as multipolygon relations, not plain ways.
+    return f"""[out:json][timeout:180];
 (
     way[\"natural\"=\"water\"][\"name\"~\"Lake Huron|Lake Erie|Lake St. Clair|Georgian Bay|Lake Ontario|Lake Simcoe\",i]({MIN_LAT},{min_lon},{MAX_LAT},{max_lon});
+    relation[\"natural\"=\"water\"][\"name\"~\"Lake Huron|Lake Erie|Lake St. Clair|Georgian Bay|Lake Ontario|Lake Simcoe\",i]({MIN_LAT},{min_lon},{MAX_LAT},{max_lon});
     way[\"waterway\"=\"river\"][\"name\"~\"Detroit River|St. Clair River|Thames River|Grand River|Maitland River|Ausable River|Sydenham River|Welland River\",i]({MIN_LAT},{min_lon},{MAX_LAT},{max_lon});
 );
 out geom;"""
@@ -103,24 +107,79 @@ def feature_kind(tags: dict[str, str]) -> int:
     return 1 if tags.get("waterway") == "river" else 0
 
 
+def _way_coords(geometry: list[dict]) -> list[tuple[float, float]]:
+    return [(float(item["lat"]), float(item["lon"])) for item in geometry]
+
+
+def stitch_rings(segments: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
+    """Join multipolygon member ways sharing endpoints into continuous rings."""
+    remaining = [list(seg) for seg in segments if len(seg) >= 2]
+    rings: list[list[tuple[float, float]]] = []
+    while remaining:
+        current = remaining.pop(0)
+        changed = True
+        while changed:
+            changed = False
+            for index, segment in enumerate(remaining):
+                if current[-1] == segment[0]:
+                    current.extend(segment[1:])
+                elif current[-1] == segment[-1]:
+                    current.extend(reversed(segment[:-1]))
+                elif current[0] == segment[-1]:
+                    current[0:0] = segment[:-1]
+                elif current[0] == segment[0]:
+                    current[0:0] = list(reversed(segment[1:]))
+                else:
+                    continue
+                remaining.pop(index)
+                changed = True
+                break
+        rings.append(current)
+    return rings
+
+
+def geometries_for_element(element: dict) -> list[tuple[dict, list[tuple[float, float]]]]:
+    if element.get("type") == "relation":
+        tags = element.get("tags", {})
+        # Multipolygon: only the outer ring(s) describe the shoreline we draw.
+        segments = [
+            _way_coords(member.get("geometry", []))
+            for member in element.get("members", [])
+            if member.get("type") == "way" and member.get("role", "outer") == "outer"
+        ]
+        return [(tags, ring) for ring in stitch_rings(segments)]
+    return [(element.get("tags", {}), _way_coords(element.get("geometry", [])))]
+
+
+def dedupe_elements(elements: list[dict]) -> list[dict]:
+    # Large lake relations get returned in full by every tile whose bbox
+    # touches them, so drop repeats by OSM (type, id) before processing.
+    seen: dict[tuple[str, int], dict] = {}
+    for element in elements:
+        key = (element.get("type"), element.get("id"))
+        seen[key] = element
+    return list(seen.values())
+
+
 def build_features(elements: list[dict]) -> tuple[list[tuple[int, int]], list[tuple[int, int, int]]]:
     points: list[tuple[int, int]] = []
     features: list[tuple[int, int, int]] = []
-    for element in elements:
-        geometry = element.get("geometry", [])
-        if len(geometry) < 2:
-            continue
-        raw = [(float(item["lat"]), float(item["lon"])) for item in geometry]
-        simplified = simplify(raw, SIMPLIFY_DEG)
-        if len(simplified) < 2:
-            continue
-        offset = len(points)
-        segment_points = [
-            (round(lat * 1e7), round(lon * 1e7))
-            for lat, lon in simplified
-        ]
-        points.extend(segment_points)
-        features.append((offset, len(simplified), feature_kind(element.get("tags", {}))))
+    for element in dedupe_elements(elements):
+        for tags, raw in geometries_for_element(element):
+            if len(raw) < 2:
+                continue
+            kind = feature_kind(tags)
+            tolerance = SIMPLIFY_DEG if kind == 1 else LAKE_SIMPLIFY_DEG
+            simplified = simplify(raw, tolerance)
+            if len(simplified) < 2:
+                continue
+            offset = len(points)
+            segment_points = [
+                (round(lat * 1e7), round(lon * 1e7))
+                for lat, lon in simplified
+            ]
+            points.extend(segment_points)
+            features.append((offset, len(simplified), kind))
     return points, features
 
 
