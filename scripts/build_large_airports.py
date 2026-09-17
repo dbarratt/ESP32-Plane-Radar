@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build runway dataset from OurAirports (large_airport only)."""
+"""Build runway dataset for Southwestern Ontario airports."""
 
 from __future__ import annotations
 
@@ -11,6 +11,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT_H = ROOT / "include" / "data" / "large_airports.h"
 OUT_CPP = ROOT / "src" / "data" / "large_airports_data.cpp"
+
+# Keep only the Southwestern Ontario airport set requested by the project.
+SW_Ontario_BOUNDS = {
+    "min_lat": 42.1,
+    "max_lat": 44.8,
+    "min_lon": -84.8,
+    "max_lon": -78.8,
+}
+INCLUDED_TYPES = {"small_airport", "medium_airport", "large_airport"}
 
 AIRPORTS_URL = (
     "https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/"
@@ -67,16 +76,29 @@ def build_dataset() -> tuple[
 
     large_idents: dict[str, tuple[int, int]] = {}
     for a in airports:
-        if a.get("type") != "large_airport":
+        if (a.get("closed") or "").strip() == "1":
+            continue
+        if (a.get("iso_country") or "").strip() != "CA":
+            continue
+        if (a.get("iso_region") or "").strip() != "CA-ON":
+            continue
+        airport_type = (a.get("type") or "").strip()
+        if airport_type not in INCLUDED_TYPES:
             continue
         ident = (a.get("ident") or "").strip()
         if len(ident) != 4:
             continue
-        lat = coord_e7(a.get("latitude_deg"))
-        lon = coord_e7(a.get("longitude_deg"))
-        if lat is None or lon is None:
+        try:
+            lat = float(a.get("latitude_deg") or 0)
+            lon = float(a.get("longitude_deg") or 0)
+        except ValueError:
             continue
-        large_idents[ident] = (lat, lon)
+        if not (
+            SW_Ontario_BOUNDS["min_lat"] <= lat <= SW_Ontario_BOUNDS["max_lat"]
+            and SW_Ontario_BOUNDS["min_lon"] <= lon <= SW_Ontario_BOUNDS["max_lon"]
+        ):
+            continue
+        large_idents[ident] = (coord_e7(str(lat)), coord_e7(str(lon)))
 
     airport_rows = sorted(
         (ident, lat, lon) for ident, (lat, lon) in large_idents.items()
