@@ -21,7 +21,6 @@ namespace {
 bool g_radar_visible = false;
 unsigned long g_wifi_down_since = 0;
 unsigned long g_last_reconnect_ms = 0;
-unsigned long g_last_adsb_fetch_ms = 0;
 unsigned long g_last_auto_range_change_ms = 0;
 unsigned long g_adsb_down_since = 0;
 
@@ -53,10 +52,14 @@ void handleBootButton() {
   }
 }
 
-void fetchAndDrawAircraft() {
-  const float fetch_km = ui::radar::fetchRadiusKm();
-  if (!services::adsb::fetchUpdate(services::location::lat(),
-                                   services::location::lon(), fetch_km)) {
+void handleAdsbResult() {
+  services::adsb::AircraftSnapshot snapshot;
+  bool fetch_succeeded = false;
+  if (!services::adsb::consumeLatestResult(&snapshot, &fetch_succeeded)) {
+    return;
+  }
+
+  if (!fetch_succeeded) {
     if (g_adsb_down_since == 0) {
       g_adsb_down_since = millis();
     }
@@ -64,9 +67,10 @@ void fetchAndDrawAircraft() {
         ui::radarDisplaySetAdsbUnavailable(true)) {
       ui::radarDisplayDraw();
     }
-    handleBootButton();
     return;
   }
+
+  ui::radarDisplaySetAircraftSnapshot(snapshot);
   g_adsb_down_since = 0;
   const bool warning_cleared =
       ui::radarDisplaySetAdsbUnavailable(false);
@@ -105,7 +109,6 @@ void fetchAndDrawAircraft() {
   } else {
     ui::radarDisplayRefreshAircraft();
   }
-  handleBootButton();
 }
 
 }  // namespace
@@ -124,10 +127,15 @@ void setup() {
   services::location::init();
   ui::radar::rangeInit();
   ui::radar::themeInit();
-  services::adsb::setPollFn(wifiLoop);
 
   if (wifiSetupConnect()) {
+    services::adsb::setFetchParameters(services::location::lat(),
+                                        services::location::lon(),
+                                        ui::radar::fetchRadiusKm());
+    services::adsb::startWorker();
     showRadarIfConnected();
+  } else {
+    services::adsb::startWorker();
   }
 }
 
@@ -163,9 +171,14 @@ void loop() {
     g_wifi_down_since = 0;
     if (!g_radar_visible) {
       showRadarIfConnected();
-    } else if (millis() - g_last_adsb_fetch_ms >= config::kAdsbFetchIntervalMs) {
-      g_last_adsb_fetch_ms = millis();
-      fetchAndDrawAircraft();
+    } else {
+      services::adsb::setFetchParameters(services::location::lat(),
+                                          services::location::lon(),
+                                          ui::radar::fetchRadiusKm());
+      handleAdsbResult();
+      if (ui::radarDisplayRepaintDue()) {
+        ui::radarDisplayRefreshAircraft();
+      }
     }
   }
 

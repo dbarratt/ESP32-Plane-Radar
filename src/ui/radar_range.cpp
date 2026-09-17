@@ -17,6 +17,7 @@ constexpr char kPrefsAutoPresetKey[] = "autoRange";
 constexpr char kPrefsMilesKey[] = "useMiles";
 constexpr char kPrefsRunwaysKey[] = "showRwys";
 constexpr char kPrefsRangeLabelLeftKey[] = "rangeLabelLeft";
+constexpr char kPrefsSweepKey[] = "sweep";
 constexpr uint8_t kDefaultRangeIndex = 1;  // 10 km ring
 constexpr float kKmPerMile = 1.609344f;
 constexpr float kBeyondRingDisplayScale = 1.1f;
@@ -27,6 +28,7 @@ uint8_t s_auto_preset_index = kDefaultRangeIndex;
 bool s_use_miles = false;
 bool s_show_runways = true;
 bool s_show_range_label_on_left = false;
+bool s_sweep_enabled = false;
 
 void saveRangeIndex() {
   if (!s_prefs.begin(kPrefsNamespace, false)) {
@@ -69,6 +71,7 @@ void rangeInit() {
   s_show_runways = s_prefs.getBool(kPrefsRunwaysKey, true);
   s_show_range_label_on_left =
       s_prefs.getBool(kPrefsRangeLabelLeftKey, false);
+  s_sweep_enabled = s_prefs.getBool(kPrefsSweepKey, true);
   s_prefs.end();
 }
 
@@ -115,20 +118,26 @@ bool showRunways() { return s_show_runways; }
 
 bool showRangeLabelOnLeft() { return s_show_range_label_on_left; }
 
-void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left) {
+bool sweepEnabled() { return s_sweep_enabled; }
+
+void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
+                  bool sweep_enabled) {
   s_use_miles = use_miles;
   s_show_runways = show_runways;
   s_show_range_label_on_left = range_label_on_left;
+  s_sweep_enabled = sweep_enabled;
   saveUseMiles();
   saveShowRunways();
   if (s_prefs.begin(kPrefsNamespace, false)) {
     s_prefs.putBool(kPrefsRangeLabelLeftKey, s_show_range_label_on_left);
+    s_prefs.putBool(kPrefsSweepKey, s_sweep_enabled);
     s_prefs.end();
   }
   Serial.printf("Distance units: %s\n", s_use_miles ? "miles" : "km");
   Serial.printf("Runway overlay: %s\n", s_show_runways ? "on" : "off");
   Serial.printf("Range label: %s\n",
                 s_show_range_label_on_left ? "left" : "right");
+  Serial.printf("Sweep animation: %s\n", s_sweep_enabled ? "on" : "off");
 }
 
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles) {
@@ -155,10 +164,12 @@ void unitsReset() {
   s_use_miles = false;
   s_show_runways = true;
   s_show_range_label_on_left = false;
+  s_sweep_enabled = false;
   if (s_prefs.begin(kPrefsNamespace, false)) {
     s_prefs.remove(kPrefsMilesKey);
     s_prefs.remove(kPrefsRunwaysKey);
     s_prefs.remove(kPrefsRangeLabelLeftKey);
+    s_prefs.remove(kPrefsSweepKey);
     s_prefs.end();
   }
 }

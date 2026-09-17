@@ -17,14 +17,20 @@ struct Aircraft {
 
 constexpr size_t kMaxAircraft = 64;
 
-size_t aircraftCount();
-const Aircraft* aircraftList();
+struct AircraftSnapshot {
+  size_t count = 0;
+  Aircraft aircraft[kMaxAircraft];
+};
 
-/** Hook invoked during long HTTP I/O (e.g. wifiLoop). Optional. */
-using PollFn = void (*)();
-void setPollFn(PollFn fn);
+/** Start the worker that fetches ADS-B data without blocking loop(). */
+bool startWorker();
 
-/** Fetch aircraft within fetch_radius_km of center_lat/lon from adsb.fi. */
-bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km);
+/** Update the request parameters used by the worker. */
+void setFetchParameters(double center_lat, double center_lon,
+                        float fetch_radius_km);
+
+/** Copy the newest worker result; returns false when no result is pending. */
+bool consumeLatestResult(AircraftSnapshot* snapshot, bool* fetch_succeeded);
+
 
 }  // namespace services::adsb

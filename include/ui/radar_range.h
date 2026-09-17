@@ -45,8 +45,10 @@ float displayRadiusKm(float outer_km);
 bool useMiles();
 bool showRunways();
 bool showRangeLabelOnLeft();
+bool sweepEnabled();
 /** Persist the radar display settings and update runtime values. */
-void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left);
+void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
+                  bool sweep_enabled);
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles);
 void formatCurrentRing3Label(char* buf, size_t len);
 /** Reset distance units to km (e.g. with WiFi credential wipe). */

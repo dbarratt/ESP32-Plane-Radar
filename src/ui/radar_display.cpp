@@ -46,6 +46,9 @@ const lgfx::GFXfont* s_tag_gfx = &fonts::FreeSansBold12pt7b;
 bool s_tag_label_metrics_ready = false;
 bool s_tag_use_vlw = false;
 bool s_adsb_unavailable = false;
+services::adsb::AircraftSnapshot s_aircraft_snapshot;
+unsigned long s_sweep_started_ms = 0;
+unsigned long s_sweep_last_frame_ms = 0;
 
 int s_scale_label_max_w = 0;
 int s_scale_label_h = 0;
@@ -532,8 +535,8 @@ void sortBeyondDotsFarFirst(BeyondDotDrawItem* items, size_t count) {
 void drawAircraft() {
   initLabelMetrics();
 
-  const size_t n = services::adsb::aircraftCount();
-  const services::adsb::Aircraft* planes = services::adsb::aircraftList();
+  const size_t n = s_aircraft_snapshot.count;
+  const services::adsb::Aircraft* planes = s_aircraft_snapshot.aircraft;
 
   AircraftDrawItem items[services::adsb::kMaxAircraft];
   BeyondDotDrawItem dots[services::adsb::kMaxAircraft];
@@ -702,6 +705,67 @@ void drawCenterDot(int cx, int cy) {
   s_draw->fillSmoothCircle(cx, cy, radar::kCenterDotRadius, radar::kColorCenter);
 }
 
+uint16_t sweepColor(uint8_t strength) {
+  uint8_t target_r = 40;
+  uint8_t target_g = 255;
+  uint8_t target_b = 55;
+  if (radar::theme() == radar::Theme::kLight) {
+    target_r = 20;
+    target_g = 145;
+    target_b = 45;
+  } else if (radar::theme() == radar::Theme::kGreenscale) {
+    target_r = 25;
+    target_g = 255;
+    target_b = 25;
+  }
+
+  const uint8_t base_r = static_cast<uint8_t>((radar::kColorBackground >> 11) * 255 / 31);
+  const uint8_t base_g = static_cast<uint8_t>(((radar::kColorBackground >> 5) & 0x3F) * 255 / 63);
+  const uint8_t base_b = static_cast<uint8_t>((radar::kColorBackground & 0x1F) * 255 / 31);
+    const auto blendChannel = [strength](uint8_t base, uint8_t target) {
+    const int delta = static_cast<int>(target) - static_cast<int>(base);
+    return static_cast<uint8_t>(static_cast<int>(base) +
+                  (delta * strength) / 255);
+    };
+    const uint8_t r = blendChannel(base_r, target_r);
+    const uint8_t g = blendChannel(base_g, target_g);
+    const uint8_t b = blendChannel(base_b, target_b);
+  return tft.color565(r, g, b);
+}
+
+void drawSweepSector(int cx, int cy, int radius) {
+  if (s_sweep_started_ms == 0) {
+    s_sweep_started_ms = millis();
+  }
+
+  constexpr float kPi = 3.14159265f;
+  constexpr float kTwoPi = 2.0f * kPi;
+  constexpr float kSweepWidth = 0.8f;
+  constexpr int kSweepBands = 5;
+  const unsigned long elapsed = millis() - s_sweep_started_ms;
+  const float progress = static_cast<float>(
+      elapsed % config::kAdsbFetchIntervalMs) /
+      static_cast<float>(config::kAdsbFetchIntervalMs);
+  const float head = progress * kTwoPi;
+
+  for (int band = 0; band < kSweepBands; ++band) {
+    const float band_start = head - kSweepWidth +
+                             kSweepWidth * band / kSweepBands;
+    const float band_end = head - kSweepWidth +
+                           kSweepWidth * (band + 1) / kSweepBands;
+    const float start_x = sinf(band_start) * radius;
+    const float start_y = -cosf(band_start) * radius;
+    const float end_x = sinf(band_end) * radius;
+    const float end_y = -cosf(band_end) * radius;
+    const uint8_t strength = static_cast<uint8_t>(
+      4 + (static_cast<uint16_t>(band + 1) * 16) / kSweepBands);
+    s_draw->fillTriangle(cx, cy, cx + static_cast<int>(lroundf(start_x)),
+                         cy + static_cast<int>(lroundf(start_y)), cx +
+                         static_cast<int>(lroundf(end_x)), cy +
+                         static_cast<int>(lroundf(end_y)), sweepColor(strength));
+  }
+}
+
 void drawCardinalLabels() {
   const int cx = radar::kCenterX;
   const int cy = radar::kCenterY;
@@ -739,6 +803,9 @@ void drawStaticGrid(Gfx& gfx) {
 
   initPalette();
   gfx.fillScreen(radar::kColorBackground);
+  if (radar::sweepEnabled()) {
+    drawSweepSector(cx, cy, grid_r);
+  }
   drawRings(cx, cy, grid_r);
   drawCrosshairs(cx, cy, grid_r, radar::kColorGrid);
   runway::drawLargeAirportRunways(gfx);
@@ -781,6 +848,10 @@ void radarDisplayDraw() {
   initPalette();
   initLabelMetrics();
 
+  if (s_sweep_started_ms == 0) {
+    s_sweep_started_ms = millis();
+  }
+
   if (ensureFrameSprite()) {
     renderFrame();
     return;
@@ -805,6 +876,25 @@ void radarDisplayRefreshAircraft() {
   radarDisplayDraw();
 }
 
+void radarDisplaySetAircraftSnapshot(
+    const services::adsb::AircraftSnapshot& snapshot) {
+  s_aircraft_snapshot = snapshot;
+}
+
+bool radarDisplayRepaintDue() {
+  if (!s_frame_ready || !radar::sweepEnabled()) {
+    return false;
+  }
+
+  const unsigned long now = millis();
+  if (s_sweep_last_frame_ms != 0 &&
+      now - s_sweep_last_frame_ms < config::kRadarSweepFrameIntervalMs) {
+    return false;
+  }
+  s_sweep_last_frame_ms = now;
+  return true;
+}
+
 bool radarDisplaySetAdsbUnavailable(bool unavailable) {
   if (s_adsb_unavailable == unavailable) {
     return false;
@@ -818,8 +908,8 @@ std::size_t radarDisplayVisibleAircraftCount() {
 }
 
 std::size_t radarDisplayAircraftCountForRange(float outer_km) {
-  const size_t n = services::adsb::aircraftCount();
-  const services::adsb::Aircraft* planes = services::adsb::aircraftList();
+  const size_t n = s_aircraft_snapshot.count;
+  const services::adsb::Aircraft* planes = s_aircraft_snapshot.aircraft;
   size_t visible_count = 0;
   for (size_t i = 0; i < n; ++i) {
     float dx_km = 0.0f;

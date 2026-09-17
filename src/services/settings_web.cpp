@@ -69,6 +69,9 @@ String settingsPage(const char* message, bool error) {
   page += F("<label class='check'><input type='checkbox' name='rangeLeft' value='1'");
   page += checked(ui::radar::showRangeLabelOnLeft());
   page += F(">Show range label on left</label>");
+  page += F("<label class='check'><input type='checkbox' name='sweep' value='1'");
+  page += checked(ui::radar::sweepEnabled());
+  page += F(">Enable sweep animation</label>");
   page += F("<label for='theme'>Theme</label><select id='theme' name='theme'>");
   page += F("<option value='0'");
   page += selected(current, Theme::kDark);
@@ -110,7 +113,8 @@ void handleSave(WiFiManager& manager) {
   services::location::save(lat, lon);
   ui::radar::saveSettings(manager.server->hasArg("miles"),
                           manager.server->hasArg("runways"),
-                          manager.server->hasArg("rangeLeft"));
+                          manager.server->hasArg("rangeLeft"),
+                          manager.server->hasArg("sweep"));
   ui::radar::saveTheme(theme);
   ui::radarDisplayDraw();
   sendSettingsPage(manager, "Settings saved.");
