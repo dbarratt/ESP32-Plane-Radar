@@ -54,7 +54,7 @@ constexpr unsigned long kAdsbFetchIntervalMs = 3000;
 constexpr unsigned long kAdsbOutageGraceMs = 10000UL;
 /** Minimum time between automatic range changes. */
 constexpr unsigned long kAutoRangeMinSwitchPeriodMs = 30000UL;
-/** Legacy scale unused — fetch uses radar::fetchRadiusKm() to screen edge. */
+/** Legacy setting retained for configuration compatibility. */
 constexpr float kAdsbFetchRadiusScale = 1.0f;
 /** false = hide aircraft with alt_baro "ground"; true = show them too. */
 constexpr bool kAdsbShowGroundAircraft = false;

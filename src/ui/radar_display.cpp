@@ -299,7 +299,8 @@ bool beyondRingEdgeDotFromLatLon(float lat, float lon, int* out_x, int* out_y) {
   if (dist_km < 0.01f) {
     return false;
   }
-  if (isInsideOuterRingKm(dist_km)) {
+  if (isInsideOuterRingKm(dist_km) ||
+      dist_km > radar::displayRadiusKm(radar::rangeCurrent().outer_km)) {
     return false;
   }
 
@@ -644,16 +645,18 @@ void drawCardinalLabel(const char* text, int x, int y, textdatum_t datum) {
   s_draw->drawString(text, x, y);
 }
 
-void drawScaleLabelWithBackground(const char* text, int x, int y) {
+void drawScaleLabelWithBackground(const char* text, int x, int y,
+                                  bool align_left) {
   applyScaleStyle();
-  s_draw->setTextDatum(textdatum_t::middle_right);
+  s_draw->setTextDatum(align_left ? textdatum_t::middle_left
+                                  : textdatum_t::middle_right);
 
   const int tw = s_draw->textWidth(text);
   const int th = s_draw->fontHeight();
   constexpr int kPadX = 3;
   constexpr int kPadY = 2;
 
-  const int left = x - tw - kPadX;
+  const int left = align_left ? x - kPadX : x - tw - kPadX;
   const int top = y - th / 2 - kPadY;
 
   s_draw->fillRect(left, top, tw + kPadX * 2, th + kPadY * 2,
@@ -712,14 +715,17 @@ void drawCardinalLabels() {
 }
 
 int scaleLabelAnchorX(int cx, int outer_radius) {
-  return cx + outer_radius - radar::kScaleGapFromOuterRing;
+  return radar::showRangeLabelOnLeft()
+             ? cx - outer_radius + radar::kScaleGapFromOuterRing
+             : cx + outer_radius - radar::kScaleGapFromOuterRing;
 }
 
 void drawScaleLabel(int cx, int cy, int outer_radius) {
   char scale_label[12];
   radar::formatCurrentRing3Label(scale_label, sizeof(scale_label));
   drawScaleLabelWithBackground(scale_label,
-                               scaleLabelAnchorX(cx, outer_radius), cy);
+                               scaleLabelAnchorX(cx, outer_radius), cy,
+                               radar::showRangeLabelOnLeft());
 }
 
 template <typename Gfx>
@@ -808,6 +814,10 @@ bool radarDisplaySetAdsbUnavailable(bool unavailable) {
 }
 
 std::size_t radarDisplayVisibleAircraftCount() {
+  return radarDisplayAircraftCountForRange(radar::rangeCurrent().outer_km);
+}
+
+std::size_t radarDisplayAircraftCountForRange(float outer_km) {
   const size_t n = services::adsb::aircraftCount();
   const services::adsb::Aircraft* planes = services::adsb::aircraftList();
   size_t visible_count = 0;
@@ -817,7 +827,11 @@ std::size_t radarDisplayVisibleAircraftCount() {
     float dist_km = 0.0f;
     offsetKmFromCenter(planes[i].lat, planes[i].lon, &dx_km, &dy_km,
                        &dist_km);
-    if (isInsideOuterRingKm(dist_km)) {
+    const float inner_ring_km =
+        outer_km * (static_cast<float>(radar::kGridOuterRadius -
+                                       radar::kAircraftInsideRingInsetPx) /
+                    static_cast<float>(radar::kGridOuterRadius));
+    if (dist_km <= inner_ring_km) {
       ++visible_count;
     }
   }

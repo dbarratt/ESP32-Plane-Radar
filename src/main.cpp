@@ -73,18 +73,22 @@ void fetchAndDrawAircraft() {
   bool range_changed = false;
   if (ui::radar::autoMode()) {
     constexpr size_t kAutoTargetAircraft = 2;
-    constexpr size_t kAutoZoomInMinimumAircraft = 3;
-    constexpr size_t kAutoZoomOutMaximumAircraft = 0;
-    const size_t visible_count = ui::radarDisplayVisibleAircraftCount();
-    const bool outside_target_band =
-        visible_count >= kAutoZoomInMinimumAircraft ||
-        visible_count <= kAutoZoomOutMaximumAircraft;
+    size_t selected_preset = ui::radar::kRangePresetCount - 1;
+    size_t selected_count = 0;
+    for (size_t i = 0; i < ui::radar::kRangePresetCount; ++i) {
+      const size_t count = ui::radarDisplayAircraftCountForRange(
+          ui::radar::kRangePresets[i].outer_km);
+      if (count >= 1 && count <= kAutoTargetAircraft) {
+        selected_preset = i;
+        selected_count = count;
+        break;
+      }
+    }
     const bool switch_period_elapsed =
         millis() - g_last_auto_range_change_ms >=
         config::kAutoRangeMinSwitchPeriodMs;
-    if (outside_target_band && switch_period_elapsed) {
-      range_changed =
-          ui::radar::autoAdjust(visible_count, kAutoTargetAircraft);
+    if (switch_period_elapsed) {
+      range_changed = ui::radar::autoSelectPreset(selected_preset);
       if (range_changed) {
         g_last_auto_range_change_ms = millis();
       }
@@ -92,8 +96,8 @@ void fetchAndDrawAircraft() {
     if (range_changed) {
       char range_label[12];
       ui::radar::formatCurrentRing3Label(range_label, sizeof(range_label));
-      Serial.printf("Auto range: %u visible aircraft, now %s\n",
-                    static_cast<unsigned>(visible_count), range_label);
+      Serial.printf("Auto range: %u focused aircraft, now %s\n",
+            static_cast<unsigned>(selected_count), range_label);
     }
   }
   if (range_changed || warning_cleared) {

@@ -13,7 +13,10 @@ void radarDisplayRefreshAircraft();
 /** Set whether the ADS-B outage warning should be shown; returns true on change. */
 bool radarDisplaySetAdsbUnavailable(bool unavailable);
 
-/** Count aircraft rendered as full symbols inside the usable outer ring. */
+/** Count aircraft rendered as full symbols for a candidate range. */
+std::size_t radarDisplayAircraftCountForRange(float outer_km);
+
+/** Count aircraft rendered as full symbols inside the current usable ring. */
 std::size_t radarDisplayVisibleAircraftCount();
 
 }  // namespace ui

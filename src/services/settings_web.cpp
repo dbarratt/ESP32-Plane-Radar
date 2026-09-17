@@ -44,7 +44,7 @@ String settingsPage(const char* message, bool error) {
   page += F("main{background:white;padding:1.5rem;border:1px solid #ccd5cc;border-radius:8px}h1{margin-top:0}");
   page += F("label{display:block;margin:1rem 0 .35rem;font-weight:600}input,select{box-sizing:border-box;width:100%;padding:.65rem;font:inherit}");
   page += F(".check{display:flex;gap:.6rem;align-items:center;font-weight:400}.check input{width:auto}");
-  page += F("button{margin-top:1.3rem;padding:.7rem 1.2rem;font:inherit;font-weight:700}.msg{padding:.7rem;background:#e6f4e8;color:#17652b}.err{background:#fde8e8;color:#9b1c1c}");
+  page += F("button{margin-top:1.3rem;padding:.7rem 1.2rem;font:inherit;font-weight:700;cursor:pointer;border:0;background-color:#1fa3ec;color:#fff;width:100%;border-radius:.3rem}.msg{padding:.7rem;background:#e6f4e8;color:#17652b}.err{background:#fde8e8;color:#9b1c1c}");
   page += F("a{color:#185c9e}</style></head><body><main><h1>Radar settings</h1>");
   if (message != nullptr && message[0] != '\0') {
     page += F("<p class='msg");
@@ -66,6 +66,9 @@ String settingsPage(const char* message, bool error) {
   page += F("<label class='check'><input type='checkbox' name='runways' value='1'");
   page += checked(ui::radar::showRunways());
   page += F(">Show airport runways</label>");
+  page += F("<label class='check'><input type='checkbox' name='rangeLeft' value='1'");
+  page += checked(ui::radar::showRangeLabelOnLeft());
+  page += F(">Show range label on left</label>");
   page += F("<label for='theme'>Theme</label><select id='theme' name='theme'>");
   page += F("<option value='0'");
   page += selected(current, Theme::kDark);
@@ -106,7 +109,8 @@ void handleSave(WiFiManager& manager) {
 
   services::location::save(lat, lon);
   ui::radar::saveSettings(manager.server->hasArg("miles"),
-                          manager.server->hasArg("runways"));
+                          manager.server->hasArg("runways"),
+                          manager.server->hasArg("rangeLeft"));
   ui::radar::saveTheme(theme);
   ui::radarDisplayDraw();
   sendSettingsPage(manager, "Settings saved.");

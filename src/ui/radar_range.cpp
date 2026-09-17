@@ -16,14 +16,17 @@ constexpr char kPrefsRangeKey[] = "rangeIdx";
 constexpr char kPrefsAutoPresetKey[] = "autoRange";
 constexpr char kPrefsMilesKey[] = "useMiles";
 constexpr char kPrefsRunwaysKey[] = "showRwys";
+constexpr char kPrefsRangeLabelLeftKey[] = "rangeLabelLeft";
 constexpr uint8_t kDefaultRangeIndex = 1;  // 10 km ring
 constexpr float kKmPerMile = 1.609344f;
+constexpr float kBeyondRingDisplayScale = 1.1f;
 
 Preferences s_prefs;
 uint8_t s_range_index = kDefaultRangeIndex;
 uint8_t s_auto_preset_index = kDefaultRangeIndex;
 bool s_use_miles = false;
 bool s_show_runways = true;
+bool s_show_range_label_on_left = false;
 
 void saveRangeIndex() {
   if (!s_prefs.begin(kPrefsNamespace, false)) {
@@ -64,6 +67,8 @@ void rangeInit() {
       (saved_auto < kRangePresetCount) ? saved_auto : kDefaultRangeIndex;
   s_use_miles = s_prefs.getBool(kPrefsMilesKey, false);
   s_show_runways = s_prefs.getBool(kPrefsRunwaysKey, true);
+  s_show_range_label_on_left =
+      s_prefs.getBool(kPrefsRangeLabelLeftKey, false);
   s_prefs.end();
 }
 
@@ -75,21 +80,12 @@ void rangeNext() {
 
 bool autoMode() { return s_range_index == kAutoRangeIndex; }
 
-bool autoAdjust(size_t visible_count, size_t target_count) {
-  if (!autoMode()) {
+bool autoSelectPreset(size_t preset_index) {
+  if (!autoMode() || preset_index >= kRangePresetCount ||
+      preset_index == s_auto_preset_index) {
     return false;
   }
-
-  uint8_t next = s_auto_preset_index;
-  if (visible_count > target_count && next > 0) {
-    --next;
-  } else if (visible_count < target_count && next + 1 < kRangePresetCount) {
-    ++next;
-  } else {
-    return false;
-  }
-
-  s_auto_preset_index = next;
+  s_auto_preset_index = static_cast<uint8_t>(preset_index);
   saveRangeIndex();
   return true;
 }
@@ -101,23 +97,38 @@ const RangePreset& rangeCurrent() {
 uint8_t rangeIndex() { return s_range_index; }
 
 float fetchRadiusKm() {
-  const float outer_km = rangeCurrent().outer_km;
-  const float screen_r_px =
-      static_cast<float>(kCenterX - kBeyondRingScreenMarginPx);
-  return outer_km * (screen_r_px / static_cast<float>(kGridOuterRadius));
+  if (autoMode()) {
+    return kRangePresets[kRangePresetCount - 1].outer_km;
+  }
+  return displayRadiusKm(rangeCurrent().outer_km);
+}
+
+float displayRadiusKm(float outer_km) {
+  const float max_fetch_km = kRangePresets[kRangePresetCount - 1].outer_km;
+  const float scaled_km = outer_km * kBeyondRingDisplayScale;
+  return scaled_km < max_fetch_km ? scaled_km : max_fetch_km;
 }
 
 bool useMiles() { return s_use_miles; }
 
 bool showRunways() { return s_show_runways; }
 
-void saveSettings(bool use_miles, bool show_runways) {
+bool showRangeLabelOnLeft() { return s_show_range_label_on_left; }
+
+void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left) {
   s_use_miles = use_miles;
   s_show_runways = show_runways;
+  s_show_range_label_on_left = range_label_on_left;
   saveUseMiles();
   saveShowRunways();
+  if (s_prefs.begin(kPrefsNamespace, false)) {
+    s_prefs.putBool(kPrefsRangeLabelLeftKey, s_show_range_label_on_left);
+    s_prefs.end();
+  }
   Serial.printf("Distance units: %s\n", s_use_miles ? "miles" : "km");
   Serial.printf("Runway overlay: %s\n", s_show_runways ? "on" : "off");
+  Serial.printf("Range label: %s\n",
+                s_show_range_label_on_left ? "left" : "right");
 }
 
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles) {
@@ -143,9 +154,11 @@ void formatCurrentRing3Label(char* buf, size_t len) {
 void unitsReset() {
   s_use_miles = false;
   s_show_runways = true;
+  s_show_range_label_on_left = false;
   if (s_prefs.begin(kPrefsNamespace, false)) {
     s_prefs.remove(kPrefsMilesKey);
     s_prefs.remove(kPrefsRunwaysKey);
+    s_prefs.remove(kPrefsRangeLabelLeftKey);
     s_prefs.end();
   }
 }

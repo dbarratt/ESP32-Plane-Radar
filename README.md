@@ -48,6 +48,7 @@ The same portal runs on the setup AP and on the device’s LAN IP while connecte
 | **Latitude / Longitude** | Radar center and ADS-B query position (defaults in `config.h` until set) |
 | **Display distances in miles** | Ring scale label in **mi** instead of **km** (e.g. `6mi` vs `10km`) |
 | **Show airport runways** | Major-airport runway overlay on the radar (off to hide) |
+| **Show range label on left** | Move the range label from the east/right spoke to the west/left spoke |
 | **Theme** | Dark, Light, or Classic greenscale radar palette |
 
 The current dark palette is the default. The Light theme uses a high-contrast
@@ -62,7 +63,7 @@ After a reset, the device reboots and shows the setup screen immediately (no “
 ### Grid
 
 - Dark blue background, subdued green rings and crosshairs
-- White **N / S / E / W** at the bezel; range label on the **east** spoke
+- White **N / S / E / W** at the bezel; range label on the **east** spoke by default, or west when enabled in Settings
 - Rings are spaced every 5 km; the selected range is the outer grid ring at the edge of the drawn axes
 - White center dot
 
@@ -70,14 +71,14 @@ Layout and colors: `include/ui/radar_theme.h`.
 
 ### Range presets
 
-| Outer grid-ring label | Aircraft/fetch radius |
+| Outer grid-ring label | Aircraft projection radius |
 |------------|-------------------------------|
 | 5 km / 3 mi | 5 km |
 | 10 km / 6 mi | 10 km (default) |
 | 15 km / 9 mi | 15 km |
 | 25 km / 16 mi | 25 km |
 
-The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It zooms out when 0 full aircraft symbols are inside the usable radar ring, holds the current range with 1–2 aircraft, and zooms in with 3 or more. Aircraft shown only as rim dots are not counted. The scale label shows the active range followed by **`(Auto)`**, such as `25km (Auto)`. Auto mode clamps at 5 km or 25 km when necessary and persists across reboot along with the last active zoom. Manual presets and the miles/km choice also persist (`planeradar` NVS namespace).
+The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It fetches the complete 25 km aircraft dataset, then evaluates all presets and selects the smallest range with 1–2 full aircraft symbols inside the usable radar ring. If no preset can meet that target, it selects 25 km. Aircraft shown only as rim dots are not counted. The scale label shows the active range followed by **`(Auto)`**, such as `25km (Auto)`. Auto mode persists across reboot along with the last active zoom. Manual presets fetch aircraft within 110% of the selected range, capped at 25 km. Manual presets, the miles/km choice, and the range-label position also persist (`planeradar` NVS namespace); the range label defaults to the east/right spoke.
 
 ### Runways
 
@@ -88,7 +89,7 @@ The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It
 ### Aircraft
 
 - **Inside the outer ring** — red heading triangle, magenta speed vector (clipped at the ring), callsign / type / altitude tags
-- **Outside the ring** (still within ADS-B fetch) — small **red dot on the screen rim** at the correct bearing (direction cue; not distance-accurate past the ring)
+- **Outside the ring** (within 110% of the active range, capped at the 25 km fetch radius) — small **red dot on the screen rim** at the correct bearing (direction cue; not distance-accurate past the ring)
 - **Tags** — placed toward the **center**: west (left) → tag on the **right** of the symbol; east (right) → tag on the **left**
 
 As range decreases (or aircraft approach), targets move inward; beyond-ring dots become full symbols when they cross the outer ring.
@@ -96,7 +97,7 @@ As range decreases (or aircraft approach), targets move inward; beyond-ring dots
 ### ADS-B
 
 - Source: `https://opendata.adsb.fi/api/v3/`
-- Fetch radius: `ui::radar::fetchRadiusKm()` — scales with the active preset to roughly the screen edge (so rim dots have data)
+- Fetch radius: `ui::radar::fetchRadiusKm()` — selected range × 110%, capped at 25 km; AUTO uses the maximum 25 km range
 - Poll interval: `kAdsbFetchIntervalMs` (3 s) in `config.h`
 - If no fetch succeeds for `kAdsbOutageGraceMs` (10 s), the radar shows an `ADS-B DATA UNAVAILABLE` warning while retaining the last aircraft frame
 - Ground aircraft hidden by default (`kAdsbShowGroundAircraft`)
