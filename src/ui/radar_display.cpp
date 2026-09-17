@@ -45,6 +45,7 @@ const lgfx::GFXfont* s_tag_gfx = &fonts::FreeSansBold12pt7b;
 
 bool s_tag_label_metrics_ready = false;
 bool s_tag_use_vlw = false;
+bool s_adsb_unavailable = false;
 
 int s_scale_label_max_w = 0;
 int s_scale_label_h = 0;
@@ -548,6 +549,38 @@ void drawAircraft() {
   }
 }
 
+void drawAdsbWarning() {
+  if (!s_adsb_unavailable) {
+    return;
+  }
+
+  constexpr int kPanelX = 16;
+  constexpr int kPanelY = 190;
+  constexpr int kPanelW = 208;
+  constexpr int kPanelH = 36;
+  constexpr int kLineGap = 2;
+  constexpr float kTextSize = 0.62f;
+
+  const uint16_t panel_color = radar::kColorAircraft;
+  const uint16_t text_color = 0xFFFF;
+  displayFontEnsureLoaded(*s_draw);
+  if (displayFontIsSmooth()) {
+    displayFontSetSmoothSize(*s_draw, kTextSize);
+  } else {
+    displayFontSetBitmap(*s_draw, &fonts::FreeSansBold9pt7b);
+  }
+
+  s_draw->fillRoundRect(kPanelX, kPanelY, kPanelW, kPanelH, 4, panel_color);
+  s_draw->setTextColor(text_color, panel_color);
+  s_draw->setTextDatum(textdatum_t::middle_center);
+  const int line_height = s_draw->fontHeight();
+  const int first_y = kPanelY + (kPanelH - line_height * 2 - kLineGap) / 2 +
+                      line_height / 2;
+  s_draw->drawString("ADS-B DATA UNAVAILABLE", radar::kCenterX, first_y);
+  s_draw->drawString("CHECK NETWORK / adsb.fi", radar::kCenterX,
+                     first_y + line_height + kLineGap);
+}
+
 void applyCardinalStyle() {
   if (s_cardinal_use_vlw) {
     displayFontSetSmoothSize(*s_draw, s_cardinal_vlw_size);
@@ -690,6 +723,7 @@ void renderFrame() {
   {
     const DrawScope scope(s_frame);
     drawAircraft();
+    drawAdsbWarning();
   }
   s_frame.pushSprite(0, 0);
   tft.setTextDatum(textdatum_t::top_left);
@@ -710,6 +744,7 @@ void radarDisplayDraw() {
   const DrawScope scope(tft);
   drawStaticGrid(tft);
   drawAircraft();
+  drawAdsbWarning();
   tft.setTextDatum(textdatum_t::top_left);
 }
 
@@ -722,6 +757,14 @@ void radarDisplayRefreshAircraft() {
   }
 
   radarDisplayDraw();
+}
+
+bool radarDisplaySetAdsbUnavailable(bool unavailable) {
+  if (s_adsb_unavailable == unavailable) {
+    return false;
+  }
+  s_adsb_unavailable = unavailable;
+  return true;
 }
 
 std::size_t radarDisplayVisibleAircraftCount() {

@@ -21,6 +21,7 @@ unsigned long g_wifi_down_since = 0;
 unsigned long g_last_reconnect_ms = 0;
 unsigned long g_last_adsb_fetch_ms = 0;
 unsigned long g_last_auto_range_change_ms = 0;
+unsigned long g_adsb_down_since = 0;
 
 void showRadarIfConnected() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -54,9 +55,19 @@ void fetchAndDrawAircraft() {
   const float fetch_km = ui::radar::fetchRadiusKm();
   if (!services::adsb::fetchUpdate(services::location::lat(),
                                    services::location::lon(), fetch_km)) {
+    if (g_adsb_down_since == 0) {
+      g_adsb_down_since = millis();
+    }
+    if (millis() - g_adsb_down_since >= config::kAdsbOutageGraceMs &&
+        ui::radarDisplaySetAdsbUnavailable(true)) {
+      ui::radarDisplayDraw();
+    }
     handleBootButton();
     return;
   }
+  g_adsb_down_since = 0;
+  const bool warning_cleared =
+      ui::radarDisplaySetAdsbUnavailable(false);
   bool range_changed = false;
   if (ui::radar::autoMode()) {
     constexpr size_t kAutoTargetAircraft = 2;
