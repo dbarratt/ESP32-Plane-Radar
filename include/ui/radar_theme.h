@@ -4,6 +4,19 @@
 
 namespace ui::radar {
 
+enum class Theme : uint8_t {
+    kDark = 0,
+    kLight = 1,
+    kGreenscale = 2,
+};
+
+constexpr uint8_t kThemeCount = 3;
+
+void themeInit();
+Theme theme();
+void saveTheme(Theme value);
+void themeReset();
+
 constexpr int kSize = 240;
 constexpr int kCenterX = kSize / 2;
 constexpr int kCenterY = kSize / 2;

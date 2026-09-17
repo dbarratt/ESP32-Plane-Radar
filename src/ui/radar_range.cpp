@@ -50,18 +50,6 @@ void saveShowRunways() {
   s_prefs.end();
 }
 
-bool portalCheckboxChecked(const char* value) {
-  if (value == nullptr || value[0] == '\0') {
-    return false;
-  }
-  // WiFiManager checkbox submits its value= attribute ("T", or "F" if we prefilled F).
-  if ((value[0] == 'T' || value[0] == 't' || value[0] == 'F' || value[0] == 'f') &&
-      value[1] == '\0') {
-    return true;
-  }
-  return strcmp(value, "on") == 0;
-}
-
 }  // namespace
 
 void rangeInit() {
@@ -123,15 +111,12 @@ bool useMiles() { return s_use_miles; }
 
 bool showRunways() { return s_show_runways; }
 
-void saveMilesFromPortal(const char* checkbox_value) {
-  s_use_miles = portalCheckboxChecked(checkbox_value);
+void saveSettings(bool use_miles, bool show_runways) {
+  s_use_miles = use_miles;
+  s_show_runways = show_runways;
   saveUseMiles();
-  Serial.printf("Distance units: %s\n", s_use_miles ? "miles" : "km");
-}
-
-void saveRunwaysFromPortal(const char* checkbox_value) {
-  s_show_runways = portalCheckboxChecked(checkbox_value);
   saveShowRunways();
+  Serial.printf("Distance units: %s\n", s_use_miles ? "miles" : "km");
   Serial.printf("Runway overlay: %s\n", s_show_runways ? "on" : "off");
 }
 

@@ -2,14 +2,14 @@
 
 ## PlatformIO
 
-Run firmware builds, uploads, and monitor commands from the workspace's dedicated PlatformIO CLI terminal. In a generic PowerShell terminal, `pio` may not be on `PATH`, and `py -m platformio` may fail because PlatformIO is not installed in that Python environment.
+Run firmware builds, uploads, and monitor commands with the PlatformIO executable directly. Do not invoke `pio` through `PATH`, and do not use `py -m platformio`, because the active terminal or Python environment may not have PlatformIO installed.
 
 Use the project environment explicitly:
 
 ```powershell
-pio run -e supermini
-pio run -e supermini -t upload --upload-port COM5
-pio device monitor -b 115200
+& "$HOME\.platformio\penv\Scripts\pio.exe" run -e supermini
+& "$HOME\.platformio\penv\Scripts\pio.exe" run -e supermini -t upload --upload-port COM5
+& "$HOME\.platformio\penv\Scripts\pio.exe" device monitor -b 115200
 ```
 
-If `pio` is unavailable, do not retry through a different Python interpreter. Switch to the PlatformIO CLI terminal or locate the PlatformIO executable through the VS Code PlatformIO extension. Check the terminal's working directory is the repository root before running commands.
+Check the terminal's working directory is the repository root before running commands. If this executable path does not exist, locate the PlatformIO installation through the VS Code PlatformIO extension rather than trying another Python interpreter.

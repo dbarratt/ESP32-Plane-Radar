@@ -64,17 +64,27 @@ double lat() { return s_lat; }
 
 double lon() { return s_lon; }
 
+bool parseAndValidate(const char* lat_str, const char* lon_str, double* lat,
+                      double* lon) {
+  if (lat == nullptr || lon == nullptr || !parseCoord(lat_str, lat) ||
+      !parseCoord(lon_str, lon)) {
+    return false;
+  }
+  return validLatLon(*lat, *lon);
+}
+
+void save(double lat, double lon) {
+  persist(lat, lon);
+  Serial.printf("Radar location saved: %.6f, %.6f\n", lat, lon);
+}
+
 bool saveFromStrings(const char* lat_str, const char* lon_str) {
   double lat = 0.0;
   double lon = 0.0;
-  if (!parseCoord(lat_str, &lat) || !parseCoord(lon_str, &lon)) {
+  if (!parseAndValidate(lat_str, lon_str, &lat, &lon)) {
     return false;
   }
-  if (!validLatLon(lat, lon)) {
-    return false;
-  }
-  persist(lat, lon);
-  Serial.printf("Radar location saved: %.6f, %.6f\n", lat, lon);
+  save(lat, lon);
   return true;
 }
 

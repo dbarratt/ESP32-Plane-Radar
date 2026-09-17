@@ -12,6 +12,7 @@
 #include "services/wifi_setup.h"
 #include "ui/radar_display.h"
 #include "ui/radar_range.h"
+#include "ui/radar_theme.h"
 #include "ui/status_screens.h"
 
 namespace {
@@ -94,7 +95,7 @@ void fetchAndDrawAircraft() {
                     static_cast<unsigned>(visible_count), range_label);
     }
   }
-  if (range_changed) {
+  if (range_changed || warning_cleared) {
     ui::radarDisplayDraw();
   } else {
     ui::radarDisplayRefreshAircraft();
@@ -117,6 +118,7 @@ void setup() {
   }
   services::location::init();
   ui::radar::rangeInit();
+  ui::radar::themeInit();
   services::adsb::setPollFn(wifiLoop);
 
   if (wifiSetupConnect()) {

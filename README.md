@@ -33,17 +33,27 @@ During setup you can also hold BOOT at power-on to force a credential reset (sam
 **Reconfigure anytime** (after the device is on your network):
 
 1. Open **`http://plane-radar.local`** or **`http://<device-ip>`** (e.g. from your router or serial log at boot)
-2. Change Wi‑Fi, location, units, or runway overlay; save
+2. Change Wi-Fi credentials; save
+
+Radar settings are available separately at **`http://plane-radar.local/settings`**
+or **`http://<device-ip>/settings`**. This page contains the radar location,
+distance units, runway overlay, and display theme.
 
 The same portal runs on the setup AP and on the device’s LAN IP while connected to Wi‑Fi. mDNS hostname is `plane-radar` → **plane-radar.local** (`kPortalHostname` in `config.h`). Some clients resolve `.local` slowly; use the IP if needed.
 
-**Custom fields** (stored in NVS):
+**Radar settings** (stored in NVS):
 
 | Field | Purpose |
 |-------|---------|
 | **Latitude / Longitude** | Radar center and ADS-B query position (defaults in `config.h` until set) |
 | **Display distances in miles** | Ring scale label in **mi** instead of **km** (e.g. `6mi` vs `10km`) |
 | **Show airport runways** | Major-airport runway overlay on the radar (off to hide) |
+| **Theme** | Dark, Light, or Classic greenscale radar palette |
+
+The current dark palette is the default. The Light theme uses a high-contrast
+light background, while Classic greenscale uses green phosphor-style tones for
+all radar elements. Settings persist across reboot. Holding BOOT for 3 seconds
+clears the Wi-Fi credentials, radar settings, and theme and restores their defaults.
 
 After a reset, the device reboots and shows the setup screen immediately (no “Connecting” loop on stale credentials).
 
@@ -72,7 +82,7 @@ The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It
 ### Runways
 
 - Major airports from OurAirports (`large_airport`); all open runway strips in range (helipads excluded)
-- Teal runway lines with one ICAO label per airport (e.g. `KJFK`); toggle in the Wi‑Fi setup portal
+- Teal runway lines with one ICAO label per airport (e.g. `KJFK`); toggle in the radar settings page
 - Update the embedded list: `python3 scripts/build_large_airports.py`
 
 ### Aircraft
@@ -87,7 +97,8 @@ As range decreases (or aircraft approach), targets move inward; beyond-ring dots
 
 - Source: `https://opendata.adsb.fi/api/v3/`
 - Fetch radius: `ui::radar::fetchRadiusKm()` — scales with the active preset to roughly the screen edge (so rim dots have data)
-- Poll interval: `kAdsbFetchIntervalMs` (5 s) in `config.h`
+- Poll interval: `kAdsbFetchIntervalMs` (3 s) in `config.h`
+- If no fetch succeeds for `kAdsbOutageGraceMs` (10 s), the radar shows an `ADS-B DATA UNAVAILABLE` warning while retaining the last aircraft frame
 - Ground aircraft hidden by default (`kAdsbShowGroundAircraft`)
 
 ## Configuration
@@ -101,7 +112,7 @@ Edit **`include/config.h`** for hardware and behavior:
 | BOOT | `kBootPin`, `kBootResetHoldMs`, `kBootTapMinMs` |
 | Display SPI | pins, `kDisplayInvert`, `kDisplayRgbOrder`, `kDisplaySpiWriteHz` |
 | Default location | `kDefaultRadarLat`, `kDefaultRadarLon` (until portal overrides) |
-| ADS-B | `kAdsbFetchIntervalMs`, `kAdsbShowGroundAircraft` |
+| ADS-B | `kAdsbFetchIntervalMs`, `kAdsbOutageGraceMs`, `kAdsbShowGroundAircraft` |
 
 Range presets: `include/ui/radar_range.h` (`kRangePresets`).
 
