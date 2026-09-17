@@ -17,7 +17,7 @@ struct Polyline {
   uint8_t kind;
 };
 
-constexpr size_t kPointCount = 1398;
+constexpr size_t kPointCount = 1161;
 constexpr size_t kPolylineCount = 387;
 
 extern const Point kPoints[];

@@ -14,19 +14,56 @@ namespace {
 constexpr float kKmPerDeg = 111.0f;
 constexpr float kDegToRad = 3.14159265f / 180.0f;
 
-void latLonToScreen(int32_t lat_e7, int32_t lon_e7, int* out_x, int* out_y) {
+struct ScreenPoint {
+  int16_t x;
+  int16_t y;
+};
+
+ScreenPoint s_projected_points[data::water_features::kPointCount];
+int32_t s_projected_center_lat_e7 = 0;
+int32_t s_projected_center_lon_e7 = 0;
+float s_projected_outer_km = 0.0f;
+bool s_projection_valid = false;
+
+void latLonToScreen(int32_t lat_e7, int32_t lon_e7, int32_t center_lat_e7,
+                   int32_t center_lon_e7, float pixels_per_km,
+                   ScreenPoint* out) {
   const float lat = static_cast<float>(lat_e7) * 1e-7f;
   const float lon = static_cast<float>(lon_e7) * 1e-7f;
-  const float center_lat = static_cast<float>(services::location::lat());
-  const float center_lon = static_cast<float>(services::location::lon());
+  const float center_lat = static_cast<float>(center_lat_e7) * 1e-7f;
+  const float center_lon = static_cast<float>(center_lon_e7) * 1e-7f;
   const float dx_km = (lon - center_lon) * kKmPerDeg *
                       cosf(center_lat * kDegToRad);
   const float dy_km = (lat - center_lat) * kKmPerDeg;
+  out->x = static_cast<int16_t>(
+      radar::kCenterX + static_cast<int>(lroundf(dx_km * pixels_per_km)));
+  out->y = static_cast<int16_t>(
+      radar::kCenterY - static_cast<int>(lroundf(dy_km * pixels_per_km)));
+}
+
+void updateProjectedPoints() {
+  const int32_t center_lat_e7 = static_cast<int32_t>(lround(
+      services::location::lat() * 1e7));
+  const int32_t center_lon_e7 = static_cast<int32_t>(lround(
+      services::location::lon() * 1e7));
+  const float outer_km = radar::rangeCurrent().outer_km;
+  if (s_projection_valid && center_lat_e7 == s_projected_center_lat_e7 &&
+      center_lon_e7 == s_projected_center_lon_e7 &&
+      outer_km == s_projected_outer_km) {
+    return;
+  }
+
   const float pixels_per_km =
-      static_cast<float>(radar::kGridOuterRadius) /
-      radar::rangeCurrent().outer_km;
-  *out_x = radar::kCenterX + static_cast<int>(lroundf(dx_km * pixels_per_km));
-  *out_y = radar::kCenterY - static_cast<int>(lroundf(dy_km * pixels_per_km));
+      static_cast<float>(radar::kGridOuterRadius) / outer_km;
+  for (size_t index = 0; index < data::water_features::kPointCount; ++index) {
+    latLonToScreen(data::water_features::kPoints[index].lat_e7,
+                   data::water_features::kPoints[index].lon_e7, center_lat_e7,
+                   center_lon_e7, pixels_per_km, &s_projected_points[index]);
+  }
+  s_projected_center_lat_e7 = center_lat_e7;
+  s_projected_center_lon_e7 = center_lon_e7;
+  s_projected_outer_km = outer_km;
+  s_projection_valid = true;
 }
 
 int distanceSquaredFromCenter(int x, int y) {
@@ -87,17 +124,14 @@ void clipPointToDisc(int x0, int y0, int* x1, int* y1) {
 
 void drawPolyline(lgfx::LGFXBase& gfx,
                   const data::water_features::Polyline& polyline) {
-  const auto* points = data::water_features::kPoints + polyline.point_offset;
+  const auto* points = s_projected_points + polyline.point_offset;
   const uint16_t color = polyline.kind == 1 ? radar::kColorWaterRiver
                                             : radar::kColorWater;
   for (uint16_t index = 1; index < polyline.point_count; ++index) {
-    int x0 = 0;
-    int y0 = 0;
-    int x1 = 0;
-    int y1 = 0;
-    latLonToScreen(points[index - 1].lat_e7, points[index - 1].lon_e7, &x0,
-                   &y0);
-    latLonToScreen(points[index].lat_e7, points[index].lon_e7, &x1, &y1);
+    int x0 = points[index - 1].x;
+    int y0 = points[index - 1].y;
+    int x1 = points[index].x;
+    int y1 = points[index].y;
     if (!segmentIntersectsDisc(x0, y0, x1, y1)) {
       continue;
     }
@@ -113,6 +147,7 @@ void drawWaterOutlines(lgfx::LGFXBase& gfx) {
   if (!radar::showWater()) {
     return;
   }
+  updateProjectedPoints();
   for (size_t index = 0; index < data::water_features::kPolylineCount; ++index) {
     drawPolyline(gfx, data::water_features::kPolylines[index]);
   }

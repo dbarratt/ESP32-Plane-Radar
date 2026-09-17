@@ -20,8 +20,8 @@ MIN_LAT = 42.1
 MAX_LAT = 44.8
 MIN_LON = -84.8
 MAX_LON = -78.8
-# About 550 m at this latitude; preserve the display-tested simplified shape.
-SIMPLIFY_DEG = 0.005
+# About 825 m at this latitude; keep the outline readable at radar scale.
+SIMPLIFY_DEG = 0.0075
 REQUEST_DELAY_SECONDS = 10
 RATE_LIMIT_BACKOFF_SECONDS = 30
 

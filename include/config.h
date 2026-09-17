@@ -52,8 +52,8 @@ constexpr double kDefaultRadarLon = 4.9041;
 constexpr unsigned long kAdsbFetchIntervalMs = 3000;
 /** Stack depth for the HTTPS/ArduinoJson ADS-B worker task. */
 constexpr uint32_t kAdsbWorkerStackSize = 16384;
-/** Maximum redraw interval for the animated radar sweep. */
-constexpr unsigned long kRadarSweepFrameIntervalMs = 50UL;
+/** Target redraw interval for the animated radar sweep. */
+constexpr unsigned long kRadarSweepFrameIntervalMs = 150UL;
 /** Show the ADS-B outage warning after this long without a successful fetch. */
 constexpr unsigned long kAdsbOutageGraceMs = 10000UL;
 /** Minimum time between automatic range changes. */

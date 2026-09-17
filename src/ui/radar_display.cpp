@@ -900,6 +900,7 @@ void radarDisplayFontSizeChanged() {
   runway::invalidateLabelStyle();
 }
 
+
 void radarDisplayRefreshAircraft() {
   initPalette();
 

@@ -47,44 +47,6 @@ int performGet(HTTPClient& http) {
   return http.GET();
 }
 
-bool readResponseBody(HTTPClient& http, String& payload) {
-  WiFiClient* stream = http.getStreamPtr();
-  if (stream == nullptr) {
-    return false;
-  }
-
-  const int content_length = http.getSize();
-  if (content_length > 0) {
-    payload.reserve(static_cast<unsigned>(content_length + 1));
-  }
-
-  uint8_t buffer[512];
-  const unsigned long deadline = millis() + kRequestTimeoutMs;
-  while (millis() < deadline) {
-    const int available = stream->available();
-    if (available > 0) {
-      const int to_read =
-          available > static_cast<int>(sizeof(buffer)) ? static_cast<int>(sizeof(buffer))
-                                                       : available;
-      const int read_bytes = stream->readBytes(buffer, to_read);
-      if (read_bytes > 0) {
-        payload.concat(reinterpret_cast<const char*>(buffer),
-                       static_cast<unsigned>(read_bytes));
-      }
-    }
-    if (content_length > 0 &&
-        static_cast<int>(payload.length()) >= content_length) {
-      break;
-    }
-    if (!http.connected() && stream->available() <= 0) {
-      break;
-    }
-    delay(1);
-  }
-
-  return payload.length() > 0;
-}
-
 float kmToNauticalMiles(float km) { return km / kKmPerNm; }
 
 bool readJsonFloat(const JsonObject& obj, const char* key, float* out) {
@@ -148,6 +110,25 @@ bool isOnGround(const JsonObject& plane) {
     return false;
   }
   return strcmp(plane["alt_baro"].as<const char*>(), "ground") == 0;
+}
+
+void configureJsonFilter(JsonDocument& filter) {
+  JsonArray aircraft_list = filter["ac"].to<JsonArray>();
+  JsonObject aircraft = aircraft_list.add<JsonObject>();
+  aircraft["lat"] = true;
+  aircraft["lon"] = true;
+  aircraft["true_heading"] = true;
+  aircraft["mag_heading"] = true;
+  aircraft["track"] = true;
+  aircraft["dir"] = true;
+  aircraft["gs"] = true;
+  aircraft["tas"] = true;
+  aircraft["ias"] = true;
+  aircraft["flight"] = true;
+  aircraft["hex"] = true;
+  aircraft["t"] = true;
+  aircraft["alt_baro"] = true;
+  aircraft["alt_geom"] = true;
 }
 
 void copyJsonStringTrimmed(const JsonObject& obj, const char* key, char* out,
@@ -216,8 +197,9 @@ void publishResult(bool succeeded, const AircraftSnapshot* snapshot) {
   }
 }
 
-bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
-                 AircraftSnapshot* snapshot) {
+bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km,
+                     AircraftSnapshot* snapshot, bool* retryable) {
+  *retryable = false;
   const float dist_nm = kmToNauticalMiles(fetch_radius_km);
 
   String url = kApiBase;
@@ -240,21 +222,28 @@ bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
   http.setTimeout(kRequestTimeoutMs);
   const int code = performGet(http);
   if (code != HTTP_CODE_OK) {
-    Serial.printf("adsb: HTTP %d\n", code);
+    char tls_error[128] = {};
+    client.lastError(tls_error, sizeof(tls_error));
+    Serial.printf("adsb: HTTP %d, TLS '%s', WiFi %d, free heap %u\n", code,
+                  tls_error, static_cast<int>(WiFi.status()),
+                  static_cast<unsigned>(ESP.getFreeHeap()));
     http.end();
     return false;
   }
+  *retryable = true;
 
-  String payload;
-  if (!readResponseBody(http, payload)) {
-    Serial.println("adsb: empty response");
-    http.end();
-    return false;
-  }
-  http.end();
-
+  JsonDocument filter;
+  configureJsonFilter(filter);
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, payload);
+  WiFiClient* stream = http.getStreamPtr();
+  if (stream == nullptr) {
+    Serial.println("adsb: response stream unavailable");
+    http.end();
+    return false;
+  }
+  const DeserializationError err =
+      deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
+  http.end();
   if (err) {
     Serial.printf("adsb: JSON parse error: %s\n", err.c_str());
     return false;
@@ -270,7 +259,10 @@ bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
     if (snapshot->count >= kMaxAircraft) {
       break;
     }
-    if (!plane["lat"].is<float>() || !plane["lon"].is<float>()) {
+    float latitude = 0.0f;
+    float longitude = 0.0f;
+    if (!readJsonFloat(plane, "lat", &latitude) ||
+        !readJsonFloat(plane, "lon", &longitude)) {
       continue;
     }
     if (isOnGround(plane) && !config::kAdsbShowGroundAircraft) {
@@ -278,8 +270,8 @@ bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
     }
 
     Aircraft* aircraft = &snapshot->aircraft[snapshot->count];
-    aircraft->lat = plane["lat"].as<float>();
-    aircraft->lon = plane["lon"].as<float>();
+    aircraft->lat = latitude;
+    aircraft->lon = longitude;
     aircraft->nose_deg = pickNoseHeading(plane);
     aircraft->track_deg = pickTrackHeading(plane);
     aircraft->gs_knots = pickGroundSpeed(plane);
@@ -289,7 +281,26 @@ bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
   return true;
 }
 
+bool fetchUpdate(double center_lat, double center_lon, float fetch_radius_km,
+                 AircraftSnapshot* snapshot) {
+  bool retryable = false;
+  if (fetchUpdateOnce(center_lat, center_lon, fetch_radius_km, snapshot,
+                      &retryable)) {
+    return true;
+  }
+  if (!retryable) {
+    return false;
+  }
+
+  Serial.println("adsb: retrying failed response");
+  delay(250);
+  bool ignored_retryable = false;
+  return fetchUpdateOnce(center_lat, center_lon, fetch_radius_km, snapshot,
+                         &ignored_retryable);
+}
+
 void adsbWorker(void*) {
+  Serial.printf("adsb: worker task running on core %d\n", xPortGetCoreID());
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
       vTaskDelay(pdMS_TO_TICKS(500));
@@ -308,10 +319,6 @@ void adsbWorker(void*) {
     AircraftSnapshot snapshot;
     const bool succeeded =
         fetchUpdate(center_lat, center_lon, fetch_radius_km, &snapshot);
-    if (succeeded) {
-      Serial.printf("adsb: %u aircraft\n",
-                    static_cast<unsigned>(snapshot.count));
-    }
     publishResult(succeeded, succeeded ? &snapshot : nullptr);
     vTaskDelay(pdMS_TO_TICKS(config::kAdsbFetchIntervalMs));
   }
