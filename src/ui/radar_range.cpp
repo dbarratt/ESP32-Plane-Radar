@@ -88,6 +88,19 @@ bool autoSelectPreset(size_t preset_index) {
       preset_index == s_auto_preset_index) {
     return false;
   }
+
+  const int current_index = static_cast<int>(s_auto_preset_index);
+  const int target_index = static_cast<int>(preset_index);
+  if (target_index > current_index + 1) {
+    preset_index = static_cast<size_t>(current_index + 1);
+  } else if (target_index < current_index - 1) {
+    preset_index = static_cast<size_t>(current_index - 1);
+  }
+
+  if (preset_index == s_auto_preset_index) {
+    return false;
+  }
+
   s_auto_preset_index = static_cast<uint8_t>(preset_index);
   saveRangeIndex();
   return true;

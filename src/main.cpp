@@ -52,6 +52,80 @@ void handleBootButton() {
   }
 }
 
+float autoModeAircraftDistanceKm(const services::adsb::Aircraft& aircraft) {
+  constexpr float kKmPerDeg = 111.0f;
+  constexpr float kDegToRad = 3.14159265f / 180.0f;
+  const float center_lat_rad =
+      static_cast<float>(services::location::lat()) * kDegToRad;
+  const float dx_km =
+      static_cast<float>(aircraft.lon - services::location::lon()) * kKmPerDeg *
+      cosf(center_lat_rad);
+  const float dy_km =
+      static_cast<float>(aircraft.lat - services::location::lat()) * kKmPerDeg;
+  return sqrtf(dx_km * dx_km + dy_km * dy_km);
+}
+
+size_t chooseAutoPresetIndex(
+    const services::adsb::AircraftSnapshot& snapshot) {
+  const size_t last_index = ui::radar::kRangePresetCount - 1;
+  if (snapshot.count == 0) {
+    return last_index;
+  }
+
+  size_t best_index = last_index;
+  float best_score = 1.0e30f;
+
+  for (size_t i = 0; i < ui::radar::kRangePresetCount; ++i) {
+    const float outer_km = ui::radar::kRangePresets[i].outer_km;
+    const float inner_km = outer_km * 0.88f;
+    const float edge_km = outer_km * 1.10f;
+    size_t visible_count = 0;
+    size_t edge_count = 0;
+    size_t total_count = 0;
+
+    for (size_t j = 0; j < snapshot.count; ++j) {
+      const float dist_km = autoModeAircraftDistanceKm(snapshot.aircraft[j]);
+      if (dist_km <= outer_km) {
+        ++total_count;
+      }
+      if (dist_km <= inner_km) {
+        ++visible_count;
+      } else if (dist_km <= edge_km) {
+        ++edge_count;
+      }
+    }
+
+    float score = static_cast<float>(i) * 8.0f;
+    if (visible_count == 0) {
+      score += static_cast<float>(last_index - i) * 30.0f;
+      score += 18.0f + static_cast<float>(edge_count) * 10.0f;
+    } else {
+      if (visible_count <= 2) {
+        score -= 10.0f;
+      }
+      if (visible_count > 4) {
+        score += static_cast<float>(visible_count - 4) * 26.0f;
+      }
+      if (edge_count > 0) {
+        score += static_cast<float>(edge_count) * 18.0f;
+      }
+      if (visible_count >= 1 && visible_count <= 3) {
+        score -= 6.0f;
+      }
+      if (visible_count == 1 && total_count > 1) {
+        score += 10.0f;
+      }
+    }
+
+    if (score < best_score) {
+      best_score = score;
+      best_index = i;
+    }
+  }
+
+  return best_index;
+}
+
 void handleAdsbResult() {
   services::adsb::AircraftSnapshot snapshot;
   bool fetch_succeeded = false;
@@ -76,18 +150,7 @@ void handleAdsbResult() {
       ui::radarDisplaySetAdsbUnavailable(false);
   bool range_changed = false;
   if (ui::radar::autoMode()) {
-    constexpr size_t kAutoTargetAircraft = 2;
-    size_t selected_preset = ui::radar::kRangePresetCount - 1;
-    size_t selected_count = 0;
-    for (size_t i = 0; i < ui::radar::kRangePresetCount; ++i) {
-      const size_t count = ui::radarDisplayAircraftCountForRange(
-          ui::radar::kRangePresets[i].outer_km);
-      if (count >= 1 && count <= kAutoTargetAircraft) {
-        selected_preset = i;
-        selected_count = count;
-        break;
-      }
-    }
+    const size_t selected_preset = chooseAutoPresetIndex(snapshot);
     const bool switch_period_elapsed =
         millis() - g_last_auto_range_change_ms >=
         config::kAutoRangeMinSwitchPeriodMs;
@@ -100,8 +163,8 @@ void handleAdsbResult() {
     if (range_changed) {
       char range_label[12];
       ui::radar::formatCurrentRing3Label(range_label, sizeof(range_label));
-      Serial.printf("Auto range: %u focused aircraft, now %s\n",
-            static_cast<unsigned>(selected_count), range_label);
+      Serial.printf("Auto range: preset %u -> %s\n",
+                    static_cast<unsigned>(selected_preset), range_label);
     }
   }
   if (range_changed || warning_cleared) {
