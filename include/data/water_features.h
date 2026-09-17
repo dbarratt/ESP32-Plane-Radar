@@ -15,13 +15,9 @@ struct Polyline {
   uint32_t point_offset;
   uint16_t point_count;
   uint8_t kind;
-    int32_t min_lat_e7;
-    int32_t max_lat_e7;
-    int32_t min_lon_e7;
-    int32_t max_lon_e7;
 };
 
-constexpr size_t kPointCount = 5768;
+constexpr size_t kPointCount = 1398;
 constexpr size_t kPolylineCount = 387;
 
 extern const Point kPoints[];

@@ -92,7 +92,6 @@ The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It
 
 - Approximate outlines for major southwestern Ontario lakes, coastlines, and rivers are embedded in the firmware.
 - Water geometry is generated from named OpenStreetMap features and simplified for the 240 px display.
-- Water polylines are skipped when their geographic bounds cannot intersect the active radar range.
 - Regenerate the embedded data with `python3 scripts/build_water_features.py`. The generator uses throttled, resumable Overpass requests and keeps its temporary cache under `scripts/.water_cache/`.
 - OpenStreetMap data is available under the [Open Data Commons Open Database License (ODbL)](https://www.openstreetmap.org/copyright). Keep this attribution with redistributed firmware or datasets.
 

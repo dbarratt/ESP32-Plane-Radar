@@ -14,26 +14,6 @@ namespace {
 constexpr float kKmPerDeg = 111.0f;
 constexpr float kDegToRad = 3.14159265f / 180.0f;
 
-bool polylineMayIntersectRange(
-  const data::water_features::Polyline& polyline) {
-  const float center_lat = static_cast<float>(services::location::lat());
-  const float center_lon = static_cast<float>(services::location::lon());
-  const float radius_km = radar::rangeCurrent().outer_km;
-  const float lat_radius = radius_km / kKmPerDeg;
-  const float lon_radius =
-    radius_km / (kKmPerDeg * cosf(center_lat * kDegToRad));
-  const int32_t min_lat = static_cast<int32_t>(
-    lroundf((center_lat - lat_radius) * 1e7f));
-  const int32_t max_lat = static_cast<int32_t>(
-    lroundf((center_lat + lat_radius) * 1e7f));
-  const int32_t min_lon = static_cast<int32_t>(
-    lroundf((center_lon - lon_radius) * 1e7f));
-  const int32_t max_lon = static_cast<int32_t>(
-    lroundf((center_lon + lon_radius) * 1e7f));
-  return polyline.max_lat_e7 >= min_lat && polyline.min_lat_e7 <= max_lat &&
-     polyline.max_lon_e7 >= min_lon && polyline.min_lon_e7 <= max_lon;
-}
-
 void latLonToScreen(int32_t lat_e7, int32_t lon_e7, int* out_x, int* out_y) {
   const float lat = static_cast<float>(lat_e7) * 1e-7f;
   const float lon = static_cast<float>(lon_e7) * 1e-7f;
@@ -134,10 +114,7 @@ void drawWaterOutlines(lgfx::LGFXBase& gfx) {
     return;
   }
   for (size_t index = 0; index < data::water_features::kPolylineCount; ++index) {
-    const auto& polyline = data::water_features::kPolylines[index];
-    if (polylineMayIntersectRange(polyline)) {
-      drawPolyline(gfx, polyline);
-    }
+    drawPolyline(gfx, data::water_features::kPolylines[index]);
   }
 }
 
