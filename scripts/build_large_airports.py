@@ -88,6 +88,8 @@ def build_dataset() -> tuple[
         ident = (a.get("ident") or "").strip()
         if len(ident) != 4:
             continue
+        if ident.startswith("C"):
+            ident = ident[1:]
         try:
             lat = float(a.get("latitude_deg") or 0)
             lon = float(a.get("longitude_deg") or 0)
@@ -110,6 +112,8 @@ def build_dataset() -> tuple[
         if r.get("closed") == "1":
             continue
         airport = (r.get("airport_ident") or "").strip()
+        if airport.startswith("C"):
+            airport = airport[1:]
         if airport not in airport_index:
             continue
         if is_helipad(r):
