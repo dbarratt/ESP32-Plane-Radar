@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV="${PIOENV:-supermini}"
 NO_BUILD=0
 OUT="${ROOT}/release/plane-radar-merged.bin"
+OTA_OUT="${ROOT}/release/plane-radar-ota.bin"
 
 usage() {
   cat <<'EOF'
@@ -14,6 +15,7 @@ Usage: scripts/merge-firmware.sh [options]
   --no-build     Skip pio run (merge only; firmware must already be built)
   --env NAME     PlatformIO env (default: supermini)
   -o PATH        Output file (default: release/plane-radar-merged.bin)
+  --ota-out PATH Output app-only OTA image (default: release/plane-radar-ota.bin)
   -h, --help     Show this help
 EOF
 }
@@ -23,6 +25,7 @@ while [[ $# -gt 0 ]]; do
     --no-build) NO_BUILD=1; shift ;;
     --env) ENV="$2"; shift 2 ;;
     -o) OUT="$2"; shift 2 ;;
+    --ota-out) OTA_OUT="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -53,5 +56,13 @@ fi
 
 mkdir -p "$(dirname "$OUT")"
 cp "$MERGED" "$OUT"
+OTA_IMAGE="${ROOT}/.pio/build/${ENV}/firmware.bin"
+if [[ ! -f "$OTA_IMAGE" ]]; then
+  echo "Expected OTA image not found: $OTA_IMAGE" >&2
+  exit 1
+fi
+mkdir -p "$(dirname "$OTA_OUT")"
+cp "$OTA_IMAGE" "$OTA_OUT"
 echo "Wrote ${OUT}"
+echo "Wrote ${OTA_OUT}"
 echo "Flash at offset 0x0 with chip ESP32-C3, 4MB flash (Web Serial flasher)."

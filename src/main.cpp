@@ -8,6 +8,7 @@
 #include "config.h"
 #include "hardware/display.h"
 #include "services/adsb_client.h"
+#include "services/ota_update.h"
 #include "services/radar_location.h"
 #include "services/wifi_setup.h"
 #include "ui/radar_display.h"
@@ -129,6 +130,11 @@ void setup() {
 void loop() {
   handleBootButton();
   wifiLoop();
+
+  if (services::ota::inProgress()) {
+    delay(10);
+    return;
+  }
 
   if (WiFi.status() != WL_CONNECTED) {
     if (g_radar_visible) {

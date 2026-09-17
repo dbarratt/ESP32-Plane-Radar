@@ -15,6 +15,7 @@
 #endif
 
 #include "config.h"
+#include "services/ota_update.h"
 #include "services/radar_location.h"
 #include "services/settings_web.h"
 #include "ui/radar_range.h"
@@ -64,13 +65,15 @@ constexpr char kPrefsForcePortalKey[] = "portal";
 bool s_force_config_portal = false;
 WiFiManager s_wm;
 bool s_wm_configured = false;
-constexpr char kSettingsMenuHtml[] =
-  "<form action='/settings' method='get'><button>Settings</button></form><br/>\n";
 
 void ensureWifiManager();
 void startLanWebPortal();
 void stopLanWebPortal();
 bool wifiLinkUp();
+
+void attachSettingsRoutes() {
+  services::settings::registerRoutes(s_wm);
+}
 
 void markForceConfigPortal() {
   s_force_config_portal = true;
@@ -179,11 +182,11 @@ void ensureWifiManager() {
   s_wm.setAPStaticIPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1),
                            IPAddress(255, 255, 255, 0));
   s_wm.setHostname(config::kPortalHostname);
-  s_wm.setCustomMenuHTML(kSettingsMenuHtml);
+  s_wm.setTitle("Plane Radar");
   const char* menu[] = {"wifi", "custom", "info", "exit", "sep", "update"};
   s_wm.setMenu(menu, sizeof(menu) / sizeof(menu[0]));
   s_wm.setAPCallback(onConfigPortalApStarted);
-  s_wm.setWebServerCallback([]() { services::settings::registerRoutes(s_wm); });
+  services::ota::configure(s_wm, attachSettingsRoutes);
   s_wm_configured = true;
 }
 

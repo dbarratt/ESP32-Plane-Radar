@@ -176,14 +176,14 @@ pio device monitor
 
 ### Web-flashable release image
 
-Single `.bin` for [esptool-js](https://espressif.github.io/esptool-js/) and similar tools (ESP32-C3, 4 MB, flash at **0x0**):
+Full `.bin` for [esptool-js](https://espressif.github.io/esptool-js/) and similar tools (ESP32-C3, 4 MB, flash at **0x0**):
 
 ```bash
 chmod +x scripts/merge-firmware.sh   # once
 ./scripts/merge-firmware.sh
 ```
 
-Writes `release/plane-radar-merged.bin`. Skip rebuild if firmware is already built:
+Writes `release/plane-radar-merged.bin` and the app-only `release/plane-radar-ota.bin`. Skip rebuild if firmware is already built:
 
 ```bash
 ./scripts/merge-firmware.sh --no-build
@@ -198,12 +198,27 @@ pio run -t merge -e supermini
 
 Put the board in download mode (hold **BOOT**, tap **RESET**), then flash with Chrome/Edge over USB.
 
+### LAN firmware updates
+
+The device uses two OTA application slots. After the OTA-capable partition table has been installed, open
+`http://plane-radar.local` or the device IP on the trusted LAN and choose **Firmware update**. Upload
+`release/plane-radar-ota.bin` or PlatformIO's `.pio/build/supermini/firmware.bin`; the device writes the
+inactive slot and restarts automatically.
+
+This update page intentionally has no login. Keep the device on a trusted LAN and do not expose its HTTP
+interface through router port forwarding. Never upload `plane-radar-merged.bin` to the OTA page: it includes
+the bootloader and partition table and is only for USB flashing at offset **0x0**.
+
+The partition layout changed from one large application slot to two `0x1C0000` OTA slots. Existing devices
+must be flashed once over USB with the full merged image before LAN updates can be used. An app-only OTA
+upload cannot install the new partition table.
+
 ### CI and releases (GitHub Actions)
 
 | Workflow | When | Output |
 |----------|------|--------|
 | [Build](.github/workflows/build.yml) | Push / PR to `main` | Artifact `plane-radar-supermini` (merged + split `.bin` files, ~90 days) |
-| [Release](.github/workflows/release.yml) | Git tag `v*` (e.g. `v1.0.0`) | GitHub Release asset `plane-radar-v1.0.0.bin` + `.sha256` |
+| [Release](.github/workflows/release.yml) | Git tag `v*` (e.g. `v1.0.0`) | GitHub Release full and OTA images + `.sha256` |
 
 To ship a version users can download:
 
@@ -212,7 +227,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The release workflow builds firmware in CI and attaches the merged image to the release. Download from **Releases** on GitHub, then flash at **0x0** (ESP32-C3, 4 MB).
+The release workflow builds firmware in CI and attaches both the full and OTA images to the release. Use the full image at **0x0** for first install or recovery, and the OTA image in the LAN firmware page.
 
 ## Dependencies
 
