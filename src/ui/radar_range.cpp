@@ -146,7 +146,7 @@ void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles) {
 }
 
 void formatCurrentRing3Label(char* buf, size_t len) {
-  formatRing3Label(buf, len, rangeCurrent().ring3_km, s_use_miles);
+  formatRing3Label(buf, len, rangeCurrent().grid_outer_km, s_use_miles);
   if (autoMode() && len > 0) {
     const size_t used = strlen(buf);
     if (used < len) {

@@ -143,7 +143,7 @@ void initLabelMetrics() {
   for (size_t i = 0; i < radar::kRangePresetCount; ++i) {
     for (bool miles : {false, true}) {
       radar::formatRing3Label(base_label, sizeof(base_label),
-                              radar::kRangePresets[i].ring3_km, miles);
+                              radar::kRangePresets[i].grid_outer_km, miles);
       snprintf(label, sizeof(label), "%s (Auto)", base_label);
       const int w = tft.textWidth(label);
       if (w > s_scale_label_max_w) {
@@ -601,8 +601,16 @@ void drawGridRing(int cx, int cy, int r, uint16_t color) {
 }
 
 void drawRings(int cx, int cy, int outer_radius) {
-  for (int i = 1; i <= radar::kRingCount; ++i) {
-    const int r = (outer_radius * i) / radar::kRingCount;
+  constexpr float kRingSpacingKm = 5.0f;
+    const float outer_ring_km = radar::rangeCurrent().grid_outer_km;
+  const int ring_count = static_cast<int>(
+      ceilf(outer_ring_km / kRingSpacingKm));
+
+  for (int i = 1; i <= ring_count; ++i) {
+    const float ring_km = i * kRingSpacingKm;
+    const int r = static_cast<int>(lroundf(
+      static_cast<float>(outer_radius) * std::min(ring_km, outer_ring_km) /
+      outer_ring_km));
     drawGridRing(cx, cy, r, radar::kColorGrid);
   }
 }

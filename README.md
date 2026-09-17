@@ -52,19 +52,20 @@ After a reset, the device reboots and shows the setup screen immediately (no “
 ### Grid
 
 - Dark blue background, subdued green rings and crosshairs
-- White **N / S / E / W** at the bezel; range label on the **east** spoke (ring 3 = ¾ of outer radius)
+- White **N / S / E / W** at the bezel; range label on the **east** spoke
+- Rings are spaced every 5 km; the selected range is the outer grid ring at the edge of the drawn axes
 - White center dot
 
 Layout and colors: `include/ui/radar_theme.h`.
 
 ### Range presets
 
-| Ring 3 label | Outer radius (aircraft scale) |
+| Outer grid-ring label | Aircraft/fetch radius |
 |------------|-------------------------------|
-| 5 km / 3 mi | ~6.7 km |
-| 10 km / 6 mi | ~13.3 km (default) |
-| 15 km / 9 mi | ~20 km |
-| 25 km / 16 mi | ~33.3 km |
+| 5 km / 3 mi | 5 km |
+| 10 km / 6 mi | 10 km (default) |
+| 15 km / 9 mi | 15 km |
+| 25 km / 16 mi | 25 km |
 
 The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It zooms out when 0 full aircraft symbols are inside the usable radar ring, holds the current range with 1–2 aircraft, and zooms in with 3 or more. Aircraft shown only as rim dots are not counted. The scale label shows the active range followed by **`(Auto)`**, such as `25km (Auto)`. Auto mode clamps at 5 km or 25 km when necessary and persists across reboot along with the last active zoom. Manual presets and the miles/km choice also persist (`planeradar` NVS namespace).
 

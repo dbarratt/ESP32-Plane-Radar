@@ -24,8 +24,6 @@ constexpr int kCardinalLabelHeightPx = 14;
 /** Scale label is this many px shorter than cardinals. */
 constexpr int kScaleBelowCardinalPx = 3;
 
-constexpr int kRingCount = 4;
-
 /** Shared grid stroke: drawWideLine half-width (~2 px total); rings use the same px count. */
 constexpr float kGridStrokeHalfWidth = 1.0f;
 
