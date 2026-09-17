@@ -90,6 +90,9 @@ String settingsPage(const char* message, bool error) {
   page += F("<label class='check'><input type='checkbox' name='runways' value='1'");
   page += checked(ui::radar::showRunways());
   page += F(">Show airport runways</label>");
+  page += F("<label class='check'><input type='checkbox' name='water' value='1'");
+  page += checked(ui::radar::showWater());
+  page += F(">Show water features</label>");
   page += F("<label class='check'><input type='checkbox' name='rangeLeft' value='1'");
   page += checked(ui::radar::showRangeLabelOnLeft());
   page += F(">Show range label on left</label>");
@@ -150,6 +153,7 @@ void handleSave(WiFiManager& manager) {
   services::location::save(lat, lon);
   ui::radar::saveSettings(manager.server->hasArg("miles"),
                           manager.server->hasArg("runways"),
+                          manager.server->hasArg("water"),
                           manager.server->hasArg("rangeLeft"),
                           manager.server->hasArg("sweep"), font_size);
   ui::radar::saveTheme(theme);

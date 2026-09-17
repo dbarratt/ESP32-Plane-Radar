@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Generate a compact southwestern Ontario water-outline dataset from OSM."""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+OUT_H = ROOT / "include" / "data" / "water_features.h"
+OUT_CPP = ROOT / "src" / "data" / "water_features_data.cpp"
+CACHE_DIR = ROOT / "scripts" / ".water_cache"
+
+MIN_LAT = 42.1
+MAX_LAT = 44.8
+MIN_LON = -84.8
+MAX_LON = -78.8
+# Preserve the original shoreline detail; runtime filtering avoids unrelated work.
+SIMPLIFY_DEG = 0.0005
+REQUEST_DELAY_SECONDS = 10
+RATE_LIMIT_BACKOFF_SECONDS = 30
+
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.nchc.org.tw/api/interpreter",
+)
+
+
+def query_for_bounds(min_lon: float, max_lon: float) -> str:
+    return f"""[out:json][timeout:120];
+(
+    way[\"natural\"=\"water\"][\"name\"~\"Lake Huron|Lake Erie|Lake St. Clair|Georgian Bay|Lake Ontario|Lake Simcoe\",i]({MIN_LAT},{min_lon},{MAX_LAT},{max_lon});
+    way[\"waterway\"=\"river\"][\"name\"~\"Detroit River|St. Clair River|Thames River|Grand River|Maitland River|Ausable River|Sydenham River|Welland River\",i]({MIN_LAT},{min_lon},{MAX_LAT},{max_lon});
+);
+out geom;"""
+
+
+def fetch_features(query: str) -> list[dict]:
+    last_error: Exception | None = None
+    for endpoint_index, url in enumerate(OVERPASS_URLS):
+        if endpoint_index > 0:
+            print(f"Waiting {REQUEST_DELAY_SECONDS}s before retrying another endpoint")
+            time.sleep(REQUEST_DELAY_SECONDS)
+        request = urllib.request.Request(
+            url,
+            data=urllib.parse.urlencode({"data": query}).encode("utf-8"),
+            headers={"User-Agent": "ESP32-Plane-Radar water dataset builder"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=300) as response:
+                return json.loads(response.read().decode("utf-8"))["elements"]
+        except urllib.error.HTTPError as error:
+            last_error = error
+            print(f"Overpass request failed at {url}: {error}")
+            if error.code == 429:
+                print(f"Rate limited; waiting {RATE_LIMIT_BACKOFF_SECONDS}s")
+                time.sleep(RATE_LIMIT_BACKOFF_SECONDS)
+        except Exception as error:
+            last_error = error
+            print(f"Overpass request failed at {url}: {error}")
+    raise RuntimeError("all Overpass endpoints failed") from last_error
+
+
+def point_line_distance(point: tuple[float, float], start: tuple[float, float],
+                        end: tuple[float, float]) -> float:
+    px, py = point
+    sx, sy = start
+    ex, ey = end
+    dx = ex - sx
+    dy = ey - sy
+    if dx == 0.0 and dy == 0.0:
+        return math.hypot(px - sx, py - sy)
+    t = max(0.0, min(1.0, ((px - sx) * dx + (py - sy) * dy) /
+                      (dx * dx + dy * dy)))
+    return math.hypot(px - (sx + t * dx), py - (sy + t * dy))
+
+
+def simplify(points: list[tuple[float, float]], tolerance: float) -> list[tuple[float, float]]:
+    if len(points) <= 2:
+        return points
+    max_distance = 0.0
+    split = 0
+    for index in range(1, len(points) - 1):
+        distance = point_line_distance(points[index], points[0], points[-1])
+        if distance > max_distance:
+            max_distance = distance
+            split = index
+    if max_distance <= tolerance:
+        return [points[0], points[-1]]
+    left = simplify(points[: split + 1], tolerance)
+    right = simplify(points[split:], tolerance)
+    return left[:-1] + right
+
+
+def feature_kind(tags: dict[str, str]) -> int:
+    return 1 if tags.get("waterway") == "river" else 0
+
+
+def build_features(elements: list[dict]) -> tuple[list[tuple[int, int]], list[tuple[int, int, int, int, int, int, int]]]:
+    points: list[tuple[int, int]] = []
+    features: list[tuple[int, int, int, int, int, int, int]] = []
+    for element in elements:
+        geometry = element.get("geometry", [])
+        if len(geometry) < 2:
+            continue
+        raw = [(float(item["lat"]), float(item["lon"])) for item in geometry]
+        simplified = simplify(raw, SIMPLIFY_DEG)
+        if len(simplified) < 2:
+            continue
+        offset = len(points)
+        segment_points = [
+            (round(lat * 1e7), round(lon * 1e7))
+            for lat, lon in simplified
+        ]
+        points.extend(segment_points)
+        latitudes = [point[0] for point in segment_points]
+        longitudes = [point[1] for point in segment_points]
+        features.append(
+            (
+                offset,
+                len(simplified),
+                feature_kind(element.get("tags", {})),
+                min(latitudes),
+                max(latitudes),
+                min(longitudes),
+                max(longitudes),
+            )
+        )
+    return points, features
+
+
+def render_header(point_count: int, feature_count: int) -> str:
+    return f'''// Generated by scripts/build_water_features.py; do not edit.
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+namespace data::water_features {{
+
+struct Point {{
+  int32_t lat_e7;
+  int32_t lon_e7;
+}};
+
+struct Polyline {{
+  uint32_t point_offset;
+  uint16_t point_count;
+  uint8_t kind;
+    int32_t min_lat_e7;
+    int32_t max_lat_e7;
+    int32_t min_lon_e7;
+    int32_t max_lon_e7;
+}};
+
+constexpr size_t kPointCount = {point_count};
+constexpr size_t kPolylineCount = {feature_count};
+
+extern const Point kPoints[];
+extern const Polyline kPolylines[];
+
+}}  // namespace data::water_features
+'''
+
+
+def render_cpp(points: list[tuple[int, int]], features: list[tuple[int, int, int, int, int, int, int]]) -> str:
+    lines = [
+        "// Generated by scripts/build_water_features.py; do not edit.",
+        '#include "data/water_features.h"',
+        "",
+        "namespace data::water_features {",
+        "",
+        "const Point kPoints[] = {",
+    ]
+    lines.extend(f"  {{{lat}, {lon}}}," for lat, lon in points)
+    lines.extend(["};", "", "const Polyline kPolylines[] = {"])
+    lines.extend(
+        f"  {{{offset}, {count}, {kind}, {min_lat}, {max_lat}, {min_lon}, {max_lon}}},"
+        for offset, count, kind, min_lat, max_lat, min_lon, max_lon in features
+    )
+    lines.extend(["};", "", "}  // namespace data::water_features", ""])
+    return "\n".join(lines)
+
+
+def main() -> int:
+    elements: list[dict] = []
+    tile_count = 8
+    tile_width = (MAX_LON - MIN_LON) / tile_count
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    for tile in range(tile_count):
+        tile_min = MIN_LON + tile * tile_width
+        tile_max = MIN_LON + (tile + 1) * tile_width
+        cache_file = CACHE_DIR / f"tile_{tile:02d}.json"
+        if cache_file.exists():
+            print(f"Loading cached tile {tile + 1}/{tile_count}")
+            elements.extend(json.loads(cache_file.read_text(encoding="utf-8")))
+            continue
+        if tile > 0:
+            print(f"Waiting {REQUEST_DELAY_SECONDS}s before the next request")
+            time.sleep(REQUEST_DELAY_SECONDS)
+        print(f"Fetching tile {tile + 1}/{tile_count}: {tile_min:.2f}..{tile_max:.2f}")
+        tile_elements = fetch_features(query_for_bounds(tile_min, tile_max))
+        cache_file.write_text(json.dumps(tile_elements), encoding="utf-8")
+        elements.extend(tile_elements)
+    points, features = build_features(elements)
+    OUT_H.parent.mkdir(parents=True, exist_ok=True)
+    OUT_CPP.parent.mkdir(parents=True, exist_ok=True)
+    OUT_H.write_text(render_header(len(points), len(features)), encoding="utf-8")
+    OUT_CPP.write_text(render_cpp(points, features), encoding="utf-8")
+    print(f"wrote {OUT_H.name} + {OUT_CPP.name} ({len(features)} polylines, {len(points)} points)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -99,6 +99,14 @@ constexpr uint8_t kRunwayB = 170;
 constexpr uint8_t kRunwayLabelR = 110;
 constexpr uint8_t kRunwayLabelG = 210;
 constexpr uint8_t kRunwayLabelB = 230;
+constexpr float kWaterLineWidthPx = 1.0f;
+constexpr float kWaterLineHalfWidth = kWaterLineWidthPx * 0.5f;
+constexpr uint8_t kWaterR = 35;
+constexpr uint8_t kWaterG = 135;
+constexpr uint8_t kWaterB = 190;
+constexpr uint8_t kWaterRiverR = 55;
+constexpr uint8_t kWaterRiverG = 165;
+constexpr uint8_t kWaterRiverB = 210;
 
 extern uint16_t kColorBackground;
 extern uint16_t kColorGrid;
@@ -110,5 +118,7 @@ extern uint16_t kColorTagType;
 extern uint16_t kColorTagAltitude;
 extern uint16_t kColorRunway;
 extern uint16_t kColorRunwayLabel;
+extern uint16_t kColorWater;
+extern uint16_t kColorWaterRiver;
 
 }  // namespace ui::radar

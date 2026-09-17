@@ -14,6 +14,7 @@
 #include "ui/radar_range.h"
 #include "ui/radar_theme.h"
 #include "ui/runway_overlay.h"
+#include "ui/water_overlay.h"
 
 namespace ui {
 namespace radar {
@@ -28,6 +29,8 @@ uint16_t kColorTagType = 0x5DFF;
 uint16_t kColorTagAltitude = 0xFFE0;
 uint16_t kColorRunway = 0x4D5F;
 uint16_t kColorRunwayLabel = 0x7DFF;
+uint16_t kColorWater = 0x0000;
+uint16_t kColorWaterRiver = 0x0000;
 
 }  // namespace radar
 
@@ -204,19 +207,28 @@ void initPalette() {
     uint8_t runway_label_r;
     uint8_t runway_label_g;
     uint8_t runway_label_b;
+    uint8_t water_r;
+    uint8_t water_g;
+    uint8_t water_b;
+    uint8_t water_river_r;
+    uint8_t water_river_g;
+    uint8_t water_river_b;
     uint8_t label_r;
     uint8_t label_g;
     uint8_t label_b;
   } palette = {
       4, 10, 28, 16, 100, 32, 255, 0, 0, 255, 0, 255, 255, 200, 0,
-      90, 200, 255, 56, 150, 170, 110, 210, 230, 255, 255, 255};
+      90, 200, 255, 56, 150, 170, 110, 210, 230, 15, 70, 120, 25, 100,
+      170, 255, 255, 255};
 
   if (radar::theme() == radar::Theme::kLight) {
     palette = {245, 248, 245, 30, 110, 60, 190, 20, 20, 150, 0, 150,
-               140, 90, 0, 0, 90, 130, 0, 110, 100, 0, 90, 120, 15, 25, 20};
+               140, 90, 0, 0, 90, 130, 0, 110, 100, 35, 110, 150, 145, 210,
+               235, 175, 230, 255};
   } else if (radar::theme() == radar::Theme::kGreenscale) {
     palette = {0, 12, 0, 0, 100, 20, 60, 255, 60, 0, 220, 0, 120, 255, 40,
-               80, 220, 80, 0, 150, 70, 80, 220, 100, 150, 255, 150};
+               80, 220, 80, 0, 150, 70, 80, 220, 100, 10, 90, 70, 20, 120,
+               95, 150, 255, 150};
   }
 
   radar::kColorBackground = tft.color565(palette.bg_r, palette.bg_g, palette.bg_b);
@@ -241,6 +253,17 @@ void initPalette() {
   radar::kColorRunwayLabel = tft.color565(palette.runway_label_r,
                                           palette.runway_label_g,
                                           palette.runway_label_b);
+  if (config::kDisplayRgbOrder) {
+    radar::kColorWater = tft.color565(palette.water_b, palette.water_g,
+                                      palette.water_r);
+    radar::kColorWaterRiver = tft.color565(
+        palette.water_river_b, palette.water_river_g, palette.water_river_r);
+  } else {
+    radar::kColorWater = tft.color565(palette.water_r, palette.water_g,
+                                      palette.water_b);
+    radar::kColorWaterRiver = tft.color565(
+        palette.water_river_r, palette.water_river_g, palette.water_river_b);
+  }
 }
 
 constexpr float kKmPerDeg = 111.0f;
@@ -812,6 +835,7 @@ void drawStaticGrid(Gfx& gfx) {
   if (radar::sweepEnabled()) {
     drawSweepSector(cx, cy, grid_r);
   }
+  water::drawWaterOutlines(gfx);
   drawRings(cx, cy, grid_r);
   drawCrosshairs(cx, cy, grid_r, radar::kColorGrid);
   runway::drawLargeAirportRunways(gfx);
@@ -834,9 +858,8 @@ bool ensureFrameSprite() {
   return true;
 }
 
-// Double-buffered frame: composite the grid AND aircraft into the off-screen
-// sprite, then blit it to the panel in a single pushSprite. Because the panel
-// is updated in one pass, labels never show an erase/redraw gap — no flicker.
+// Composite the grid, sweep, and aircraft into the off-screen sprite, then
+// blit once so labels never show an erase/redraw gap.
 void renderFrame() {
   drawStaticGrid(s_frame);  // opens its own DrawScope(s_frame)
   {

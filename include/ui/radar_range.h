@@ -52,13 +52,15 @@ float displayRadiusKm(float outer_km);
 
 bool useMiles();
 bool showRunways();
+bool showWater();
 bool showRangeLabelOnLeft();
 bool sweepEnabled();
 FontSize fontSize();
 float fontSizeScale();
 /** Persist the radar display settings and update runtime values. */
-void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
-                  bool sweep_enabled, FontSize font_size);
+void saveSettings(bool use_miles, bool show_runways, bool show_water,
+                  bool range_label_on_left, bool sweep_enabled,
+                  FontSize font_size);
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles);
 void formatCurrentRing3Label(char* buf, size_t len);
 /** Reset distance units to km (e.g. with WiFi credential wipe). */

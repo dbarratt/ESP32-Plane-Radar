@@ -48,6 +48,7 @@ The same portal runs on the setup AP and on the device’s LAN IP while connecte
 | **Latitude / Longitude** | Radar center and ADS-B query position (defaults in `config.h` until set) |
 | **Display distances in miles** | Ring scale label in **mi** instead of **km** (e.g. `6mi` vs `10km`) |
 | **Show airport runways** | Major-airport runway overlay on the radar (off to hide) |
+| **Show water features** | Major lake, coastline, and river outlines on the radar (off by default) |
 | **Show range label on left** | Move the range label from the east/right spoke to the west/left spoke |
 | **Radar font size** | Use smaller (0.80x), default (1.00x), or larger (1.20x) radar labels |
 | **Theme** | Dark, Light, or Classic greenscale radar palette |
@@ -86,6 +87,14 @@ The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It
 - Major airports from OurAirports (`large_airport`); all open runway strips in range (helipads excluded)
 - Teal runway lines with one ICAO label per airport (e.g. `KJFK`); toggle in the radar settings page
 - Update the embedded list: `python3 scripts/build_large_airports.py`
+
+### Water outlines
+
+- Approximate outlines for major southwestern Ontario lakes, coastlines, and rivers are embedded in the firmware.
+- Water geometry is generated from named OpenStreetMap features and simplified for the 240 px display.
+- Water polylines are skipped when their geographic bounds cannot intersect the active radar range.
+- Regenerate the embedded data with `python3 scripts/build_water_features.py`. The generator uses throttled, resumable Overpass requests and keeps its temporary cache under `scripts/.water_cache/`.
+- OpenStreetMap data is available under the [Open Data Commons Open Database License (ODbL)](https://www.openstreetmap.org/copyright). Keep this attribution with redistributed firmware or datasets.
 
 ### Aircraft
 
