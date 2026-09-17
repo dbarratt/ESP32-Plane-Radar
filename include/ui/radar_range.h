@@ -5,6 +5,14 @@
 
 namespace ui::radar {
 
+enum class FontSize : uint8_t {
+  kSmaller = 0,
+  kDefault = 1,
+  kLarger = 2,
+};
+
+constexpr uint8_t kFontSizeCount = 3;
+
 /**
  * Range presets (outer grid-ring distance, always stored in km).
  */
@@ -46,9 +54,11 @@ bool useMiles();
 bool showRunways();
 bool showRangeLabelOnLeft();
 bool sweepEnabled();
+FontSize fontSize();
+float fontSizeScale();
 /** Persist the radar display settings and update runtime values. */
 void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
-                  bool sweep_enabled);
+                  bool sweep_enabled, FontSize font_size);
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles);
 void formatCurrentRing3Label(char* buf, size_t len);
 /** Reset distance units to km (e.g. with WiFi credential wipe). */

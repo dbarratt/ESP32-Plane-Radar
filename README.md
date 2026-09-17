@@ -37,7 +37,7 @@ During setup you can also hold BOOT at power-on to force a credential reset (sam
 
 Radar settings are available separately at **`http://plane-radar.local/settings`**
 or **`http://<device-ip>/settings`**. This page contains the radar location,
-distance units, runway overlay, and display theme.
+distance units, runway overlay, radar font size, and display theme.
 
 The same portal runs on the setup AP and on the device’s LAN IP while connected to Wi‑Fi. mDNS hostname is `plane-radar` → **plane-radar.local** (`kPortalHostname` in `config.h`). Some clients resolve `.local` slowly; use the IP if needed.
 
@@ -49,6 +49,7 @@ The same portal runs on the setup AP and on the device’s LAN IP while connecte
 | **Display distances in miles** | Ring scale label in **mi** instead of **km** (e.g. `6mi` vs `10km`) |
 | **Show airport runways** | Major-airport runway overlay on the radar (off to hide) |
 | **Show range label on left** | Move the range label from the east/right spoke to the west/left spoke |
+| **Radar font size** | Use smaller (0.80x), default (1.00x), or larger (1.20x) radar labels |
 | **Theme** | Dark, Light, or Classic greenscale radar palette |
 
 The current dark palette is the default. The Light theme uses a high-contrast

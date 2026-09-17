@@ -9,6 +9,9 @@ namespace ui {
 /** Draw the static sonar/radar grid (black disc, green overlay, labels). */
 void radarDisplayDraw();
 
+/** Invalidate cached radar label metrics after a font-size change. */
+void radarDisplayFontSizeChanged();
+
 /** Redraw aircraft only (blits cached grid; no full-screen clear). */
 void radarDisplayRefreshAircraft();
 

@@ -63,9 +63,10 @@ void initRunwayLabelStyle(lgfx::LGFXBase& gfx) {
 
 void applyRunwayLabelStyle(lgfx::LGFXBase& gfx) {
   if (s_runway_label_use_vlw) {
-    displayFontSetSmoothSize(gfx, s_runway_label_vlw_size);
+    displayFontSetSmoothSize(gfx, s_runway_label_vlw_size * radar::fontSizeScale());
   } else {
     displayFontSetBitmap(gfx, s_runway_label_gfx);
+    gfx.setTextSize(radar::fontSizeScale());
   }
 }
 
@@ -247,6 +248,8 @@ void drawAirportLabel(lgfx::LGFXBase& gfx,
 }
 
 }  // namespace
+
+void invalidateLabelStyle() { s_runway_label_ready = false; }
 
 void drawLargeAirportRunways(lgfx::LGFXBase& gfx) {
   if (!radar::showRunways()) {

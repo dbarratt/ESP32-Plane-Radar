@@ -29,12 +29,36 @@ String selected(Theme current, Theme option) {
   return current == option ? " selected" : "";
 }
 
+bool parseFontSize(const String& value, ui::radar::FontSize* out) {
+  if (out == nullptr) {
+    return false;
+  }
+  if (value == "smaller") {
+    *out = ui::radar::FontSize::kSmaller;
+    return true;
+  }
+  if (value == "default") {
+    *out = ui::radar::FontSize::kDefault;
+    return true;
+  }
+  if (value == "larger") {
+    *out = ui::radar::FontSize::kLarger;
+    return true;
+  }
+  return false;
+}
+
+String selected(ui::radar::FontSize current, ui::radar::FontSize option) {
+  return current == option ? " selected" : "";
+}
+
 String settingsPage(const char* message, bool error) {
   char lat[24];
   char lon[24];
   snprintf(lat, sizeof(lat), "%.6f", services::location::lat());
   snprintf(lon, sizeof(lon), "%.6f", services::location::lon());
   const Theme current = ui::radar::theme();
+  const ui::radar::FontSize current_font_size = ui::radar::fontSize();
 
   String page;
   page.reserve(4200);
@@ -80,6 +104,14 @@ String settingsPage(const char* message, bool error) {
   page += F(">Light</option><option value='2'");
   page += selected(current, Theme::kGreenscale);
   page += F(">Classic greenscale</option></select>");
+  page += F("<label for='fontSize'>Radar font size</label><select id='fontSize' name='fontSize'>");
+  page += F("<option value='smaller'");
+  page += selected(current_font_size, ui::radar::FontSize::kSmaller);
+  page += F(">Smaller</option><option value='default'");
+  page += selected(current_font_size, ui::radar::FontSize::kDefault);
+  page += F(">Default</option><option value='larger'");
+  page += selected(current_font_size, ui::radar::FontSize::kLarger);
+  page += F(">Larger</option></select>");
   page += F("<button type='submit'>Save settings</button></form><p><a href='/'>Wi-Fi setup</a></p></main></body></html>");
   return page;
 }
@@ -91,7 +123,7 @@ void sendSettingsPage(WiFiManager& manager, const char* message = nullptr,
 
 void handleSave(WiFiManager& manager) {
   if (!manager.server->hasArg("lat") || !manager.server->hasArg("lon") ||
-      !manager.server->hasArg("theme")) {
+      !manager.server->hasArg("theme") || !manager.server->hasArg("fontSize")) {
     sendSettingsPage(manager, "All required fields must be provided.", true);
     return;
   }
@@ -99,6 +131,7 @@ void handleSave(WiFiManager& manager) {
   double lat = 0.0;
   double lon = 0.0;
   Theme theme = Theme::kDark;
+  ui::radar::FontSize font_size = ui::radar::FontSize::kDefault;
   if (!services::location::parseAndValidate(manager.server->arg("lat").c_str(),
                                             manager.server->arg("lon").c_str(),
                                             &lat, &lon)) {
@@ -109,13 +142,18 @@ void handleSave(WiFiManager& manager) {
     sendSettingsPage(manager, "Unknown theme selection.", true);
     return;
   }
+  if (!parseFontSize(manager.server->arg("fontSize"), &font_size)) {
+    sendSettingsPage(manager, "Unknown font size selection.", true);
+    return;
+  }
 
   services::location::save(lat, lon);
   ui::radar::saveSettings(manager.server->hasArg("miles"),
                           manager.server->hasArg("runways"),
                           manager.server->hasArg("rangeLeft"),
-                          manager.server->hasArg("sweep"));
+                          manager.server->hasArg("sweep"), font_size);
   ui::radar::saveTheme(theme);
+  ui::radarDisplayFontSizeChanged();
   ui::radarDisplayDraw();
   sendSettingsPage(manager, "Settings saved.");
 }

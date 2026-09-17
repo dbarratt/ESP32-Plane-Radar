@@ -422,9 +422,11 @@ void drawSpeedVector(int cx, int cy, float heading_deg, float track_deg,
 
 void applyTagStyle() {
   if (s_tag_use_vlw) {
-    displayFontSetSmoothSize(*s_draw, s_tag_vlw_size);
+    displayFontSetSmoothSize(*s_draw,
+                             s_tag_vlw_size * radar::fontSizeScale());
   } else {
     displayFontSetBitmap(*s_draw, s_tag_gfx);
+    s_draw->setTextSize(radar::fontSizeScale());
   }
 }
 
@@ -627,17 +629,21 @@ void drawAdsbWarning() {
 
 void applyCardinalStyle() {
   if (s_cardinal_use_vlw) {
-    displayFontSetSmoothSize(*s_draw, s_cardinal_vlw_size);
+    displayFontSetSmoothSize(*s_draw,
+                             s_cardinal_vlw_size * radar::fontSizeScale());
   } else {
     displayFontSetBitmap(*s_draw, s_cardinal_gfx);
+    s_draw->setTextSize(radar::fontSizeScale());
   }
 }
 
 void applyScaleStyle() {
   if (s_scale_use_vlw) {
-    displayFontSetSmoothSize(*s_draw, s_scale_vlw_size);
+    displayFontSetSmoothSize(*s_draw,
+                             s_scale_vlw_size * radar::fontSizeScale());
   } else {
     displayFontSetBitmap(*s_draw, s_scale_gfx);
+    s_draw->setTextSize(radar::fontSizeScale());
   }
 }
 
@@ -863,6 +869,12 @@ void radarDisplayDraw() {
   drawAircraft();
   drawAdsbWarning();
   tft.setTextDatum(textdatum_t::top_left);
+}
+
+void radarDisplayFontSizeChanged() {
+  s_label_metrics_ready = false;
+  s_tag_label_metrics_ready = false;
+  runway::invalidateLabelStyle();
 }
 
 void radarDisplayRefreshAircraft() {

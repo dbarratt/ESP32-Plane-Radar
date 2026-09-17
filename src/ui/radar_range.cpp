@@ -18,6 +18,7 @@ constexpr char kPrefsMilesKey[] = "useMiles";
 constexpr char kPrefsRunwaysKey[] = "showRwys";
 constexpr char kPrefsRangeLabelLeftKey[] = "rangeLabelLeft";
 constexpr char kPrefsSweepKey[] = "sweep";
+constexpr char kPrefsFontSizeKey[] = "fontSize";
 constexpr uint8_t kDefaultRangeIndex = 1;  // 10 km ring
 constexpr float kKmPerMile = 1.609344f;
 constexpr float kBeyondRingDisplayScale = 1.1f;
@@ -29,6 +30,11 @@ bool s_use_miles = false;
 bool s_show_runways = true;
 bool s_show_range_label_on_left = false;
 bool s_sweep_enabled = false;
+FontSize s_font_size = FontSize::kDefault;
+
+bool validFontSize(FontSize value) {
+  return static_cast<uint8_t>(value) < kFontSizeCount;
+}
 
 void saveRangeIndex() {
   if (!s_prefs.begin(kPrefsNamespace, false)) {
@@ -72,6 +78,11 @@ void rangeInit() {
   s_show_range_label_on_left =
       s_prefs.getBool(kPrefsRangeLabelLeftKey, false);
   s_sweep_enabled = s_prefs.getBool(kPrefsSweepKey, true);
+  const uint8_t saved_font_size =
+      s_prefs.getUChar(kPrefsFontSizeKey, static_cast<uint8_t>(FontSize::kDefault));
+  s_font_size = validFontSize(static_cast<FontSize>(saved_font_size))
+                    ? static_cast<FontSize>(saved_font_size)
+                    : FontSize::kDefault;
   s_prefs.end();
 }
 
@@ -133,17 +144,36 @@ bool showRangeLabelOnLeft() { return s_show_range_label_on_left; }
 
 bool sweepEnabled() { return s_sweep_enabled; }
 
+FontSize fontSize() { return s_font_size; }
+
+float fontSizeScale() {
+  switch (s_font_size) {
+    case FontSize::kSmaller:
+      return 0.80f;
+    case FontSize::kLarger:
+      return 1.20f;
+    case FontSize::kDefault:
+    default:
+      return 1.0f;
+  }
+}
+
 void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
-                  bool sweep_enabled) {
+                  bool sweep_enabled, FontSize font_size) {
+  if (!validFontSize(font_size)) {
+    return;
+  }
   s_use_miles = use_miles;
   s_show_runways = show_runways;
   s_show_range_label_on_left = range_label_on_left;
   s_sweep_enabled = sweep_enabled;
+  s_font_size = font_size;
   saveUseMiles();
   saveShowRunways();
   if (s_prefs.begin(kPrefsNamespace, false)) {
     s_prefs.putBool(kPrefsRangeLabelLeftKey, s_show_range_label_on_left);
     s_prefs.putBool(kPrefsSweepKey, s_sweep_enabled);
+    s_prefs.putUChar(kPrefsFontSizeKey, static_cast<uint8_t>(s_font_size));
     s_prefs.end();
   }
   Serial.printf("Distance units: %s\n", s_use_miles ? "miles" : "km");
@@ -151,6 +181,7 @@ void saveSettings(bool use_miles, bool show_runways, bool range_label_on_left,
   Serial.printf("Range label: %s\n",
                 s_show_range_label_on_left ? "left" : "right");
   Serial.printf("Sweep animation: %s\n", s_sweep_enabled ? "on" : "off");
+  Serial.printf("Radar font size: %u\n", static_cast<unsigned>(s_font_size));
 }
 
 void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles) {
@@ -178,11 +209,13 @@ void unitsReset() {
   s_show_runways = true;
   s_show_range_label_on_left = false;
   s_sweep_enabled = false;
+  s_font_size = FontSize::kDefault;
   if (s_prefs.begin(kPrefsNamespace, false)) {
     s_prefs.remove(kPrefsMilesKey);
     s_prefs.remove(kPrefsRunwaysKey);
     s_prefs.remove(kPrefsRangeLabelLeftKey);
     s_prefs.remove(kPrefsSweepKey);
+    s_prefs.remove(kPrefsFontSizeKey);
     s_prefs.end();
   }
 }
