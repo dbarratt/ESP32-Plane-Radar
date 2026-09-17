@@ -13,6 +13,7 @@ namespace {
 
 constexpr char kPrefsNamespace[] = "planeradar";
 constexpr char kPrefsRangeKey[] = "rangeIdx";
+constexpr char kPrefsAutoPresetKey[] = "autoRange";
 constexpr char kPrefsMilesKey[] = "useMiles";
 constexpr char kPrefsRunwaysKey[] = "showRwys";
 constexpr uint8_t kDefaultRangeIndex = 1;  // 10 km ring
@@ -20,6 +21,7 @@ constexpr float kKmPerMile = 1.609344f;
 
 Preferences s_prefs;
 uint8_t s_range_index = kDefaultRangeIndex;
+uint8_t s_auto_preset_index = kDefaultRangeIndex;
 bool s_use_miles = false;
 bool s_show_runways = true;
 
@@ -28,6 +30,7 @@ void saveRangeIndex() {
     return;
   }
   s_prefs.putUChar(kPrefsRangeKey, s_range_index);
+  s_prefs.putUChar(kPrefsAutoPresetKey, s_auto_preset_index);
   s_prefs.end();
 }
 
@@ -66,19 +69,46 @@ void rangeInit() {
     return;
   }
   const uint8_t saved = s_prefs.getUChar(kPrefsRangeKey, kDefaultRangeIndex);
-  s_range_index =
-      (saved < kRangePresetCount) ? saved : kDefaultRangeIndex;
+  s_range_index = (saved < kRangeModeCount) ? saved : kDefaultRangeIndex;
+  const uint8_t saved_auto =
+      s_prefs.getUChar(kPrefsAutoPresetKey, kDefaultRangeIndex);
+  s_auto_preset_index =
+      (saved_auto < kRangePresetCount) ? saved_auto : kDefaultRangeIndex;
   s_use_miles = s_prefs.getBool(kPrefsMilesKey, false);
   s_show_runways = s_prefs.getBool(kPrefsRunwaysKey, true);
   s_prefs.end();
 }
 
 void rangeNext() {
-  s_range_index = static_cast<uint8_t>((s_range_index + 1) % kRangePresetCount);
+  s_range_index =
+      static_cast<uint8_t>((s_range_index + 1) % kRangeModeCount);
   saveRangeIndex();
 }
 
-const RangePreset& rangeCurrent() { return kRangePresets[s_range_index]; }
+bool autoMode() { return s_range_index == kAutoRangeIndex; }
+
+bool autoAdjust(size_t visible_count, size_t target_count) {
+  if (!autoMode()) {
+    return false;
+  }
+
+  uint8_t next = s_auto_preset_index;
+  if (visible_count > target_count && next > 0) {
+    --next;
+  } else if (visible_count < target_count && next + 1 < kRangePresetCount) {
+    ++next;
+  } else {
+    return false;
+  }
+
+  s_auto_preset_index = next;
+  saveRangeIndex();
+  return true;
+}
+
+const RangePreset& rangeCurrent() {
+  return kRangePresets[autoMode() ? s_auto_preset_index : s_range_index];
+}
 
 uint8_t rangeIndex() { return s_range_index; }
 
@@ -117,6 +147,12 @@ void formatRing3Label(char* buf, size_t len, float ring3_km, bool use_miles) {
 
 void formatCurrentRing3Label(char* buf, size_t len) {
   formatRing3Label(buf, len, rangeCurrent().ring3_km, s_use_miles);
+  if (autoMode() && len > 0) {
+    const size_t used = strlen(buf);
+    if (used < len) {
+      snprintf(buf + used, len - used, " (Auto)");
+    }
+  }
 }
 
 void unitsReset() {

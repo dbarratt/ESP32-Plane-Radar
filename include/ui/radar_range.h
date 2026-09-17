@@ -33,11 +33,17 @@ constexpr RangePreset kRangePresets[] = {
 
 constexpr size_t kRangePresetCount =
     sizeof(kRangePresets) / sizeof(kRangePresets[0]);
+constexpr uint8_t kAutoRangeIndex = static_cast<uint8_t>(kRangePresetCount);
+constexpr size_t kRangeModeCount = kRangePresetCount + 1;
 
 /** Load saved range and distance units from flash. Call once after boot. */
 void rangeInit();
 /** Cycle preset and save to flash. */
 void rangeNext();
+/** True when the fifth, automatic range mode is selected. */
+bool autoMode();
+/** Move one preset toward the target visible-aircraft count. */
+bool autoAdjust(size_t visible_count, size_t target_count);
 const RangePreset& rangeCurrent();
 uint8_t rangeIndex();
 /** ADSB fetch radius (km): scaled to screen edge so beyond-ring dots have data. */

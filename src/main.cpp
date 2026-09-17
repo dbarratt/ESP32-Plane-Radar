@@ -20,6 +20,7 @@ bool g_radar_visible = false;
 unsigned long g_wifi_down_since = 0;
 unsigned long g_last_reconnect_ms = 0;
 unsigned long g_last_adsb_fetch_ms = 0;
+unsigned long g_last_auto_range_change_ms = 0;
 
 void showRadarIfConnected() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -56,7 +57,37 @@ void fetchAndDrawAircraft() {
     handleBootButton();
     return;
   }
-  ui::radarDisplayRefreshAircraft();
+  bool range_changed = false;
+  if (ui::radar::autoMode()) {
+    constexpr size_t kAutoTargetAircraft = 2;
+    constexpr size_t kAutoZoomInMinimumAircraft = 3;
+    constexpr size_t kAutoZoomOutMaximumAircraft = 0;
+    const size_t visible_count = ui::radarDisplayVisibleAircraftCount();
+    const bool outside_target_band =
+        visible_count >= kAutoZoomInMinimumAircraft ||
+        visible_count <= kAutoZoomOutMaximumAircraft;
+    const bool switch_period_elapsed =
+        millis() - g_last_auto_range_change_ms >=
+        config::kAutoRangeMinSwitchPeriodMs;
+    if (outside_target_band && switch_period_elapsed) {
+      range_changed =
+          ui::radar::autoAdjust(visible_count, kAutoTargetAircraft);
+      if (range_changed) {
+        g_last_auto_range_change_ms = millis();
+      }
+    }
+    if (range_changed) {
+      char range_label[12];
+      ui::radar::formatCurrentRing3Label(range_label, sizeof(range_label));
+      Serial.printf("Auto range: %u visible aircraft, now %s\n",
+                    static_cast<unsigned>(visible_count), range_label);
+    }
+  }
+  if (range_changed) {
+    ui::radarDisplayDraw();
+  } else {
+    ui::radarDisplayRefreshAircraft();
+  }
   handleBootButton();
 }
 

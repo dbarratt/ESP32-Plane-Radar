@@ -138,11 +138,13 @@ void initLabelMetrics() {
   applyScaleStyle();
   s_scale_label_h = tft.fontHeight();
   s_scale_label_max_w = 0;
-  char label[12];
+  char label[24];
+  char base_label[12];
   for (size_t i = 0; i < radar::kRangePresetCount; ++i) {
     for (bool miles : {false, true}) {
-      radar::formatRing3Label(label, sizeof(label), radar::kRangePresets[i].ring3_km,
-                              miles);
+      radar::formatRing3Label(base_label, sizeof(base_label),
+                              radar::kRangePresets[i].ring3_km, miles);
+      snprintf(label, sizeof(label), "%s (Auto)", base_label);
       const int w = tft.textWidth(label);
       if (w > s_scale_label_max_w) {
         s_scale_label_max_w = w;
@@ -712,6 +714,23 @@ void radarDisplayRefreshAircraft() {
   }
 
   radarDisplayDraw();
+}
+
+std::size_t radarDisplayVisibleAircraftCount() {
+  const size_t n = services::adsb::aircraftCount();
+  const services::adsb::Aircraft* planes = services::adsb::aircraftList();
+  size_t visible_count = 0;
+  for (size_t i = 0; i < n; ++i) {
+    float dx_km = 0.0f;
+    float dy_km = 0.0f;
+    float dist_km = 0.0f;
+    offsetKmFromCenter(planes[i].lat, planes[i].lon, &dx_km, &dy_km,
+                       &dist_km);
+    if (isInsideOuterRingKm(dist_km)) {
+      ++visible_count;
+    }
+  }
+  return visible_count;
 }
 
 }  // namespace ui

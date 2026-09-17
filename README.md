@@ -17,7 +17,7 @@ After Wi‑Fi is saved, the device reconnects automatically; the radar runs in t
 
 | Action | Effect |
 |--------|--------|
-| **Short tap** | Cycle range preset (5 → 10 → 15 → 25 km); saved to flash |
+| **Short tap** | Cycle range mode (5 → 10 → 15 → 25 km → AUTO); saved to flash |
 | **Hold 3 s** | Clear Wi‑Fi, location, and units; reboot into setup portal |
 
 During setup you can also hold BOOT at power-on to force a credential reset (same as the long press).
@@ -66,7 +66,7 @@ Layout and colors: `include/ui/radar_theme.h`.
 | 15 km / 9 mi | ~20 km |
 | 25 km / 16 mi | ~33.3 km |
 
-Preset and miles/km choice persist across reboot (`planeradar` NVS namespace).
+The fifth **AUTO** mode adjusts the range no more than once every 30 seconds. It zooms out when 0 full aircraft symbols are inside the usable radar ring, holds the current range with 1–2 aircraft, and zooms in with 3 or more. Aircraft shown only as rim dots are not counted. The scale label shows the active range followed by **`(Auto)`**, such as `25km (Auto)`. Auto mode clamps at 5 km or 25 km when necessary and persists across reboot along with the last active zoom. Manual presets and the miles/km choice also persist (`planeradar` NVS namespace).
 
 ### Runways
 
