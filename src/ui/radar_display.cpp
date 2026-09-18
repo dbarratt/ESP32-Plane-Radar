@@ -223,8 +223,8 @@ void initPalette() {
 
   if (radar::theme() == radar::Theme::kLight) {
     palette = {245, 248, 245, 30, 110, 60, 190, 20, 20, 150, 0, 150,
-               140, 90, 0, 0, 90, 130, 0, 110, 100, 35, 110, 150, 145, 210,
-               235, 175, 230, 255};
+           140, 90, 0, 0, 90, 130, 0, 110, 100, 35, 110, 150, 15, 70,
+           120, 25, 100, 170, 255, 255, 255};
   } else if (radar::theme() == radar::Theme::kGreenscale) {
     palette = {0, 12, 0, 0, 100, 20, 60, 255, 60, 0, 220, 0, 120, 255, 40,
                80, 220, 80, 0, 150, 70, 80, 220, 100, 10, 90, 70, 20, 120,
@@ -734,32 +734,26 @@ void drawCenterDot(int cx, int cy) {
   s_draw->fillSmoothCircle(cx, cy, radar::kCenterDotRadius, radar::kColorCenter);
 }
 
-uint16_t sweepColor(uint8_t strength) {
-  uint8_t target_r = 40;
-  uint8_t target_g = 255;
-  uint8_t target_b = 55;
-  if (radar::theme() == radar::Theme::kLight) {
-    target_r = 20;
-    target_g = 145;
-    target_b = 45;
-  } else if (radar::theme() == radar::Theme::kGreenscale) {
-    target_r = 25;
-    target_g = 255;
-    target_b = 25;
-  }
+// Pure green (R=B=0) so only the green channel competes for an 8bpp rgb332
+// bucket (g3 = g8 >> 5). Tail (darkest) -> head (brightest).
+// Dark/greenscale themes have a near-black background, so the 3 darkest
+// distinct buckets (1/2/3, G=48/80/112) stand out; the light theme has a
+// near-white background, so we instead need the 3 lightest distinct buckets
+// (5/6/7, G=176/208/240).
+const uint16_t kSweepColorsDark[] = {
+    tft.color565(0, 48, 0),
+    tft.color565(0, 80, 0),
+    tft.color565(0, 112, 0),
+};
+const uint16_t kSweepColorsLight[] = {
+  tft.color565(0, 240, 0),
+    tft.color565(0, 208, 0),
+  tft.color565(0, 176, 0),
+};
 
-  const uint8_t base_r = static_cast<uint8_t>((radar::kColorBackground >> 11) * 255 / 31);
-  const uint8_t base_g = static_cast<uint8_t>(((radar::kColorBackground >> 5) & 0x3F) * 255 / 63);
-  const uint8_t base_b = static_cast<uint8_t>((radar::kColorBackground & 0x1F) * 255 / 31);
-    const auto blendChannel = [strength](uint8_t base, uint8_t target) {
-    const int delta = static_cast<int>(target) - static_cast<int>(base);
-    return static_cast<uint8_t>(static_cast<int>(base) +
-                  (delta * strength) / 255);
-    };
-    const uint8_t r = blendChannel(base_r, target_r);
-    const uint8_t g = blendChannel(base_g, target_g);
-    const uint8_t b = blendChannel(base_b, target_b);
-  return tft.color565(r, g, b);
+const uint16_t* sweepColorsForTheme() {
+  return radar::theme() == radar::Theme::kLight ? kSweepColorsLight
+                                                 : kSweepColorsDark;
 }
 
 void drawSweepSector(int cx, int cy, int radius) {
@@ -769,29 +763,31 @@ void drawSweepSector(int cx, int cy, int radius) {
 
   constexpr float kPi = 3.14159265f;
   constexpr float kTwoPi = 2.0f * kPi;
-  constexpr float kSweepWidth = 0.8f;
-  constexpr int kSweepBands = 5;
+  constexpr float kSweepWidth = 0.5f;
+  constexpr int kSweepBands = 3;
+  // Tail (darkest) -> head (brightest) angular width fractions of kSweepWidth;
+  // the head band is thinnest, widening toward the darker tail.
+  constexpr float kBandFractions[kSweepBands] = {0.45f, 0.33f, 0.22f};
+  const uint16_t* sweep_colors = sweepColorsForTheme();
   const unsigned long elapsed = millis() - s_sweep_started_ms;
   const float progress = static_cast<float>(
       elapsed % config::kAdsbFetchIntervalMs) /
       static_cast<float>(config::kAdsbFetchIntervalMs);
   const float head = progress * kTwoPi;
 
+  float offset = 0.0f;
   for (int band = 0; band < kSweepBands; ++band) {
-    const float band_start = head - kSweepWidth +
-                             kSweepWidth * band / kSweepBands;
-    const float band_end = head - kSweepWidth +
-                           kSweepWidth * (band + 1) / kSweepBands;
+    const float band_start = head - kSweepWidth + offset;
+    offset += kBandFractions[band] * kSweepWidth;
+    const float band_end = head - kSweepWidth + offset;
     const float start_x = sinf(band_start) * radius;
     const float start_y = -cosf(band_start) * radius;
     const float end_x = sinf(band_end) * radius;
     const float end_y = -cosf(band_end) * radius;
-    const uint8_t strength = static_cast<uint8_t>(
-      4 + (static_cast<uint16_t>(band + 1) * 16) / kSweepBands);
     s_draw->fillTriangle(cx, cy, cx + static_cast<int>(lroundf(start_x)),
                          cy + static_cast<int>(lroundf(start_y)), cx +
                          static_cast<int>(lroundf(end_x)), cy +
-                         static_cast<int>(lroundf(end_y)), sweepColor(strength));
+                         static_cast<int>(lroundf(end_y)), sweep_colors[band]);
   }
 }
 
@@ -849,7 +845,7 @@ bool ensureFrameSprite() {
   if (s_frame_ready) {
     return true;
   }
-  s_frame.setColorDepth(16);
+  s_frame.setColorDepth(8);
   if (!s_frame.createSprite(radar::kSize, radar::kSize)) {
     Serial.println("radar: frame sprite alloc failed");
     return false;

@@ -9,7 +9,6 @@
 
 #include "config.h"
 
-#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -18,14 +17,18 @@ namespace services::adsb {
 
 namespace {
 
+// HTTPS: opendata.adsb.fi's Cloudflare front 301-redirects plain HTTP
+// requests to HTTPS (confirmed with -MaximumRedirection 0), and HTTPClient
+// doesn't follow redirects by default, so HTTP alone just loops on 301.
+// mbedtls needs a fixed ~33KB (two 16KB in/out buffers, baked into a
+// prebuilt libmbedtls.a on this board/platform, can't be shrunk via
+// sdkconfig) — the 8bpp frame sprite leaves enough heap headroom for this.
 constexpr char kApiBase[] = "https://opendata.adsb.fi/api/v3/lat/";
 constexpr float kKmPerNm = 1.852f;
-constexpr int kConnectAttemptMs = 200;
+constexpr int kConnectAttemptMs = 5000;
 constexpr unsigned long kRequestTimeoutMs = 10000;
-/** TLS handshake needs a large contiguous block; below this, skip the fetch
- * rather than let it fail mid-handshake. */
-constexpr size_t kMinFreeHeapForFetch = 24000;
-constexpr size_t kMinLargestBlockForFetch = 16000;
+constexpr size_t kMinFreeHeapForFetch = 40000;
+constexpr size_t kMinLargestBlockForFetch = 20000;
 
 AircraftSnapshot s_snapshots[2];
 int s_completed_snapshot = -1;
@@ -238,11 +241,6 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   http.setTimeout(kRequestTimeoutMs);
   const int code = performGet(http);
   if (code != HTTP_CODE_OK) {
-    char tls_error[128] = {};
-    client.lastError(tls_error, sizeof(tls_error));
-    Serial.printf("adsb: HTTP %d, TLS '%s', WiFi %d, free heap %u\n", code,
-                  tls_error, static_cast<int>(WiFi.status()),
-                  static_cast<unsigned>(ESP.getFreeHeap()));
     http.end();
     return false;
   }
