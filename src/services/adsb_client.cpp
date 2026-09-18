@@ -9,6 +9,7 @@
 
 #include "config.h"
 
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -21,6 +22,10 @@ constexpr char kApiBase[] = "https://opendata.adsb.fi/api/v3/lat/";
 constexpr float kKmPerNm = 1.852f;
 constexpr int kConnectAttemptMs = 200;
 constexpr unsigned long kRequestTimeoutMs = 10000;
+/** TLS handshake needs a large contiguous block; below this, skip the fetch
+ * rather than let it fail mid-handshake. */
+constexpr size_t kMinFreeHeapForFetch = 24000;
+constexpr size_t kMinLargestBlockForFetch = 16000;
 
 AircraftSnapshot s_snapshots[2];
 int s_completed_snapshot = -1;
@@ -45,6 +50,14 @@ bool ensureMutex() {
 int performGet(HTTPClient& http) {
   http.setConnectTimeout(kConnectAttemptMs);
   return http.GET();
+}
+
+void logHeapState(const char* tag) {
+  Serial.printf("adsb: %s free heap %u, largest block %u, min free ever %u\n",
+                tag, static_cast<unsigned>(ESP.getFreeHeap()),
+                static_cast<unsigned>(
+                    heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+                static_cast<unsigned>(ESP.getMinFreeHeap()));
 }
 
 float kmToNauticalMiles(float km) { return km / kKmPerNm; }
@@ -200,6 +213,17 @@ void publishResult(bool succeeded, const AircraftSnapshot* snapshot) {
 bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km,
                      AircraftSnapshot* snapshot, bool* retryable) {
   *retryable = false;
+
+  const size_t free_heap = ESP.getFreeHeap();
+  const size_t largest_block =
+      heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (free_heap < kMinFreeHeapForFetch || largest_block < kMinLargestBlockForFetch) {
+    Serial.printf(
+        "adsb: skipping fetch, heap too low (free %u, largest block %u)\n",
+        static_cast<unsigned>(free_heap), static_cast<unsigned>(largest_block));
+    return false;
+  }
+
   const float dist_nm = kmToNauticalMiles(fetch_radius_km);
 
   String url = kApiBase;
@@ -208,6 +232,8 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   url += String(center_lon, 6);
   url += "/dist/";
   url += String(dist_nm, 1);
+
+  logHeapState("before connect");
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -221,6 +247,7 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   http.useHTTP10(true);
   http.setTimeout(kRequestTimeoutMs);
   const int code = performGet(http);
+  logHeapState("after handshake+headers");
   if (code != HTTP_CODE_OK) {
     char tls_error[128] = {};
     client.lastError(tls_error, sizeof(tls_error));
@@ -244,6 +271,7 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   const DeserializationError err =
       deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
   http.end();
+  logHeapState("after JSON parse");
   if (err) {
     Serial.printf("adsb: JSON parse error: %s\n", err.c_str());
     return false;
