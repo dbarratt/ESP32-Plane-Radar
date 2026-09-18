@@ -52,14 +52,6 @@ int performGet(HTTPClient& http) {
   return http.GET();
 }
 
-void logHeapState(const char* tag) {
-  Serial.printf("adsb: %s free heap %u, largest block %u, min free ever %u\n",
-                tag, static_cast<unsigned>(ESP.getFreeHeap()),
-                static_cast<unsigned>(
-                    heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
-                static_cast<unsigned>(ESP.getMinFreeHeap()));
-}
-
 float kmToNauticalMiles(float km) { return km / kKmPerNm; }
 
 bool readJsonFloat(const JsonObject& obj, const char* key, float* out) {
@@ -233,8 +225,6 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   url += "/dist/";
   url += String(dist_nm, 1);
 
-  logHeapState("before connect");
-
   WiFiClientSecure client;
   client.setInsecure();
 
@@ -247,7 +237,6 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   http.useHTTP10(true);
   http.setTimeout(kRequestTimeoutMs);
   const int code = performGet(http);
-  logHeapState("after handshake+headers");
   if (code != HTTP_CODE_OK) {
     char tls_error[128] = {};
     client.lastError(tls_error, sizeof(tls_error));
@@ -271,7 +260,6 @@ bool fetchUpdateOnce(double center_lat, double center_lon, float fetch_radius_km
   const DeserializationError err =
       deserializeJson(doc, *stream, DeserializationOption::Filter(filter));
   http.end();
-  logHeapState("after JSON parse");
   if (err) {
     Serial.printf("adsb: JSON parse error: %s\n", err.c_str());
     return false;
